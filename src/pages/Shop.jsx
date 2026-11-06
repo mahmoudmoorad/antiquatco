@@ -1,7 +1,12 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import products from "../data/products";
+
+import {
+  getProducts,
+  getCategories,
+} from "../data/products";
+
 import ProductCard from "../components/ProductCard";
 import { useLanguage } from "../context/LanguageContext";
 import translations from "../data/translations";
@@ -17,42 +22,97 @@ function Shop() {
   const [searchTerm, setSearchTerm] = useState(urlSearch);
   const [selectedCategory, setSelectedCategory] = useState("All");
 
-  const categories = [
-    { value: "All", label: t.all },
-    { value: "Decor", label: t.decor },
-    { value: "Collectibles", label: t.collectibles },
-    { value: "Lighting", label: t.lighting },
-    { value: "Antiques", label: t.antiques },
-  ];
+  const [products, setProducts] = useState(getProducts);
+  const [categories, setCategories] = useState(getCategories);
+
+  // Listen for product and category updates
+  useEffect(() => {
+    const updateProducts = () => {
+      setProducts(getProducts());
+    };
+
+    const updateCategories = () => {
+      setCategories(getCategories());
+    };
+
+    const handleStorageChange = (event) => {
+      if (event.key === "antikatko-products") {
+        updateProducts();
+      }
+
+      if (event.key === "antikatko-categories") {
+        updateCategories();
+      }
+    };
+
+    window.addEventListener("productsUpdated", updateProducts);
+    window.addEventListener("categoriesUpdated", updateCategories);
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      window.removeEventListener("productsUpdated", updateProducts);
+      window.removeEventListener("categoriesUpdated", updateCategories);
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, []);
 
   useEffect(() => {
     setSearchTerm(urlSearch);
   }, [urlSearch]);
 
-  const filteredProducts = products.filter((product) => {
-    const searchValue = searchTerm.trim().toLowerCase();
+  // Reset selected category if it no longer exists
+  useEffect(() => {
+    if (
+      selectedCategory !== "All" &&
+      !categories.some(
+        (category) => category.value === selectedCategory
+      )
+    ) {
+      setSelectedCategory("All");
+    }
+  }, [categories, selectedCategory]);
 
-    const searchableValues = [
-      product.name,
-      product.nameAr,
-      product.category,
-      product.categoryAr,
-    ]
-      .filter(Boolean)
-      .map((value) => value.toLowerCase());
+  const categoryFilters = useMemo(() => {
+    return [
+      {
+        value: "All",
+        label: t.all,
+      },
+      ...categories.map((category) => ({
+        value: category.value,
+        label: isArabic
+          ? category.nameAr || category.name
+          : category.name || category.value,
+      })),
+    ];
+  }, [categories, isArabic, t.all]);
 
-    const matchesSearch =
-      !searchValue ||
-      searchableValues.some((value) =>
-        value.includes(searchValue)
-      );
+  const filteredProducts = useMemo(() => {
+    return products.filter((product) => {
+      const searchValue = searchTerm.trim().toLowerCase();
 
-    const matchesCategory =
-      selectedCategory === "All" ||
-      product.category === selectedCategory;
+      const searchableValues = [
+        product.name,
+        product.nameAr,
+        product.category,
+        product.categoryAr,
+      ]
+        .filter(Boolean)
+        .map((value) => value.toLowerCase());
 
-    return matchesSearch && matchesCategory;
-  });
+      const matchesSearch =
+        !searchValue ||
+        searchableValues.some((value) =>
+          value.includes(searchValue)
+        );
+
+      const matchesCategory =
+        selectedCategory === "All" ||
+        product.category === selectedCategory;
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [products, searchTerm, selectedCategory]);
 
   const handleSearchChange = (value) => {
     setSearchTerm(value);
@@ -89,7 +149,7 @@ function Shop() {
           />
 
           <div className="shop-categories">
-            {categories.map((category) => (
+            {categoryFilters.map((category) => (
               <button
                 key={category.value}
                 type="button"

@@ -1,12 +1,28 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import products from "../data/products";
+import { getProducts } from "../data/products";
 import ProductCard from "../components/ProductCard";
 import { useLanguage } from "../context/LanguageContext";
 import translations from "../data/translations";
+import heroImage from "../assets/WhatsApp Image 2026-11-06 at 2.20.47 PM.jpeg";
 
 function Home() {
   const { language, isArabic } = useLanguage();
   const t = translations[language].home;
+
+  const [products, setProducts] = useState(getProducts);
+
+  useEffect(() => {
+    const updateProducts = () => {
+      setProducts(getProducts());
+    };
+
+    window.addEventListener("productsUpdated", updateProducts);
+
+    return () => {
+      window.removeEventListener("productsUpdated", updateProducts);
+    };
+  }, []);
 
   return (
     <main>
@@ -24,13 +40,13 @@ function Home() {
 
         <div className="hero-image">
           <img
-            src="https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=1200"
+            src={heroImage}
             alt={isArabic ? "ديكور داخلي كلاسيكي" : "Vintage interior"}
           />
         </div>
       </section>
 
-      {/* 2. التصنيفات - Categories */}
+      {/* 2. Categories */}
       <section className="categories">
         <div className="section-heading">
           <span>{t.categoriesTag}</span>
@@ -72,7 +88,7 @@ function Home() {
         </div>
       </section>
 
-      {/* 3. الأكثر مبيعاً - Best Sellers / Featured */}
+      {/* 3. Best Sellers / Featured */}
       <section className="products-section">
         <div className="section-heading">
           <span>{t.featuredTag}</span>
@@ -87,7 +103,7 @@ function Home() {
         </div>
       </section>
 
-      {/* 4. كوليكشن المجموعه كلو - Full Collection */}
+      {/* 4. Full Collection */}
       <section className="products-section full-collection-section">
         <div className="section-heading">
           <span>{isArabic ? "المجموعة الكاملة" : "FULL COLLECTION"}</span>

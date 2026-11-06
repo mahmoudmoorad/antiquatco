@@ -1,4 +1,3 @@
-
 import {
   createContext,
   useContext,
@@ -6,6 +5,8 @@ import {
   useMemo,
   useState,
 } from "react";
+
+import { getProducts } from "../data/products";
 
 const CartContext = createContext(null);
 const STORAGE_KEY = "antikatko-cart";
@@ -23,24 +24,68 @@ export function CartProvider({ children }) {
   const [cartItems, setCartItems] = useState(readCart);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
+  // حفظ السلة
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cartItems));
   }, [cartItems]);
+
+  // تحديث بيانات المنتجات الموجودة في السلة
+  useEffect(() => {
+    const syncCartProducts = () => {
+      const latestProducts = getProducts();
+
+      setCartItems((currentItems) => {
+        const updatedItems = currentItems
+          .map((cartItem) => {
+            const latestProduct = latestProducts.find(
+              (product) =>
+                String(product.id) === String(cartItem.id)
+            );
+
+            if (!latestProduct) return null;
+
+            return {
+              ...latestProduct,
+              quantity: cartItem.quantity,
+            };
+          })
+          .filter(Boolean);
+
+        return updatedItems;
+      });
+    };
+
+    // تحديث السلة عند فتح المتجر
+    syncCartProducts();
+
+    // الاستماع لأي تعديل من لوحة الأدمن
+    window.addEventListener("productsUpdated", syncCartProducts);
+
+    return () => {
+      window.removeEventListener(
+        "productsUpdated",
+        syncCartProducts
+      );
+    };
+  }, []);
 
   const addToCart = (product, quantity = 1) => {
     if (!product || product.id == null) return;
 
     const amount = Math.max(1, Number(quantity) || 1);
 
-    setCartItems(current => {
+    setCartItems((current) => {
       const found = current.find(
-        item => String(item.id) === String(product.id)
+        (item) => String(item.id) === String(product.id)
       );
 
       if (found) {
-        return current.map(item =>
+        return current.map((item) =>
           String(item.id) === String(product.id)
-            ? { ...item, quantity: item.quantity + amount }
+            ? {
+                ...product,
+                quantity: item.quantity + amount,
+              }
             : item
         );
       }
@@ -49,9 +94,9 @@ export function CartProvider({ children }) {
     });
   };
 
-  const removeFromCart = id => {
-    setCartItems(current =>
-      current.filter(item => String(item.id) !== String(id))
+  const removeFromCart = (id) => {
+    setCartItems((current) =>
+      current.filter((item) => String(item.id) !== String(id))
     );
   };
 
@@ -60,8 +105,8 @@ export function CartProvider({ children }) {
 
     if (!Number.isFinite(amount) || amount < 1) return;
 
-    setCartItems(current =>
-      current.map(item =>
+    setCartItems((current) =>
+      current.map((item) =>
         String(item.id) === String(id)
           ? { ...item, quantity: amount }
           : item

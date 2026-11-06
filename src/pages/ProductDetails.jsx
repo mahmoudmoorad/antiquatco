@@ -1,6 +1,6 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useState } from "react";
-import products from "../data/products";
+import { useState, useEffect } from "react";
+import { getProducts } from "../data/products";
 import { useCart } from "../context/CartContext";
 import { useWishlist } from "../context/WishlistContext";
 import { useLanguage } from "../context/LanguageContext";
@@ -11,14 +11,31 @@ function ProductDetails() {
 
   const { isArabic } = useLanguage();
 
+  const [products, setProducts] = useState(getProducts);
+  const [quantity, setQuantity] = useState(1);
+
+  useEffect(() => {
+    const updateProducts = () => {
+      setProducts(getProducts());
+    };
+
+    window.addEventListener("productsUpdated", updateProducts);
+
+    return () => {
+      window.removeEventListener("productsUpdated", updateProducts);
+    };
+  }, []);
+
+  useEffect(() => {
+    setQuantity(1);
+  }, [id]);
+
   const product = products.find(
     (item) => String(item.id) === String(id)
   );
 
   const { addToCart, openCart } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
-
-  const [quantity, setQuantity] = useState(1);
 
   if (!product) {
     return (
@@ -42,6 +59,11 @@ function ProductDetails() {
     ? product.categoryAr || product.category
     : product.category;
 
+  // جلب الوصف الديناميكي المكتوب من لوحة الأدمن أو استخدام النص الافتراضي
+  const productDescription = isArabic
+    ? product.descriptionAr || product.description || "قطعة مختارة بعناية من مجموعة ANTIKATKO. أضف لمسة من الأناقة الخالدة والطابع المميز إلى مساحتك."
+    : product.description || "A carefully selected piece from the ANTIKATKO collection. Add a timeless touch and distinctive character to your space.";
+
   const currentPrice = Number(product.price);
 
   const originalPrice = Number(
@@ -60,6 +82,7 @@ function ProductDetails() {
 
   const formatPrice = (price) => {
     const formattedNum = Number(price).toLocaleString(numberLocale);
+
     return isArabic
       ? `${formattedNum} ${currency}`
       : `${currency} ${formattedNum}`;
@@ -117,10 +140,8 @@ function ProductDetails() {
             )}
           </div>
 
-          <p>
-            {isArabic
-              ? "قطعة مختارة بعناية من مجموعة ANTIKATKO. أضف لمسة من الأناقة الخالدة والطابع المميز إلى مساحتك."
-              : "A carefully selected piece from the ANTIKATKO collection. Add a timeless touch and distinctive character to your space."}
+          <p className="product-description-text">
+            {productDescription}
           </p>
 
           <div className="quantity-controls">
