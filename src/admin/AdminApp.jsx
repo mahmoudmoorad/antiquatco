@@ -1,14 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import {
-  getProducts,
-  saveProducts,
-  getCategories,
-  saveCategories,
-} from "../data/products";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import adminProductService from "../services/adminProductService";
+import adminCategoryService from "../services/adminCategoryService";
+import adminOrderService from "../services/adminOrderService";
 import "./admin.css";
-
-const ORDERS_KEY = "antikatko-orders";
 
 const initialForm = {
   name: "",
@@ -20,17 +16,23 @@ const initialForm = {
   price: "",
   originalPrice: "",
   image: "",
+  stock: 10,
 };
 
 const orderStatuses = [
-  "Pending",
-  "Processing",
-  "Shipped",
-  "Delivered",
-  "Cancelled",
+  "PENDING",
+  "PROCESSING",
+  "SHIPPED",
+  "DELIVERED",
+  "CANCELLED",
 ];
 
 const statusLabels = {
+  PENDING: "قيد الانتظار",
+  PROCESSING: "جاري التجهيز",
+  SHIPPED: "تم الشحن",
+  DELIVERED: "تم التسليم",
+  CANCELLED: "ملغي",
   Pending: "قيد الانتظار",
   Processing: "جاري التجهيز",
   Shipped: "تم الشحن",
@@ -38,7 +40,27 @@ const statusLabels = {
   Cancelled: "ملغي",
 };
 
-// Reusable SVG icons
+const paymentStatuses = ["PENDING", "UNPAID", "PAID", "FAILED"];
+
+const paymentStatusLabels = {
+  PENDING: "قيد المراجعة",
+  UNPAID: "غير مسدد",
+  PAID: "تم الدفع",
+  FAILED: "فشل الدفع",
+  Pending: "قيد المراجعة",
+  Unpaid: "غير مسدد",
+  Paid: "تم الدفع",
+  Failed: "فشل الدفع",
+};
+
+const paymentMethodLabels = {
+  vodafone_cash: "فودافون كاش",
+  instapay: "انستاباي",
+  cash_on_delivery: "الدفع عند الاستلام",
+};
+
+const SHIPPING_COST = 100;
+
 function Icon({ name, size = 18 }) {
   const paths = {
     dashboard: (
@@ -66,7 +88,7 @@ function Icon({ name, size = 18 }) {
       <>
         <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
         <circle cx="10" cy="7" r="4" />
-        <path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+        <path d="M20 21v-2a4 4 0 0 1 0 7.75" />
       </>
     ),
     grid: (
@@ -117,6 +139,18 @@ function Icon({ name, size = 18 }) {
         <path d="M3 5l3-2h12" />
       </>
     ),
+    logout: (
+      <>
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+        <path d="m16 17 5-5-5-5" />
+        <path d="M21 12H9" />
+      </>
+    ),
+    menu: (
+      <>
+        <path d="M4 6h16M4 12h16M4 18h16" />
+      </>
+    ),
   };
 
   return (
@@ -136,31 +170,10 @@ function Icon({ name, size = 18 }) {
   );
 }
 
-function getOrders() {
-  try {
-    const savedOrders = JSON.parse(
-      localStorage.getItem(ORDERS_KEY) || "[]"
-    );
-
-    return Array.isArray(savedOrders) ? savedOrders : [];
-  } catch (error) {
-    console.error("Error loading orders:", error);
-    return [];
-  }
-}
-
-function saveOrders(orders) {
-  localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
-  window.dispatchEvent(new Event("ordersUpdated"));
-}
-
 function formatDate(date) {
   if (!date) return "—";
-
   const parsedDate = new Date(date);
-
   if (Number.isNaN(parsedDate.getTime())) return "—";
-
   return parsedDate.toLocaleString("ar-EG");
 }
 
@@ -184,13 +197,28 @@ function getCustomerKey(customer) {
 }
 
 function AdminApp() {
-  const [products, setProducts] = useState(getProducts);
-  const [orders, setOrders] = useState(getOrders);
-  const [categories, setCategories] = useState(getCategories);
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      navigate("/login", { replace: true });
+    }
+  };
+
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -199,50 +227,34 @@ function AdminApp() {
 
   const [form, setForm] = useState(initialForm);
 
-  // Category management states
   const [newCatName, setNewCatName] = useState("");
   const [newCatNameAr, setNewCatNameAr] = useState("");
   const [editingCatValue, setEditingCatValue] = useState(null);
   const [editCatForm, setEditCatForm] = useState({ name: "", nameAr: "" });
 
   useEffect(() => {
-    document.title = "ANTIKATKO | Admin Dashboard";
+    document.title = "ANTIQUTCO | Admin Dashboard";
 
-    const updateProducts = () => {
-      setProducts(getProducts());
-    };
-
-    const updateOrders = () => {
-      setOrders(getOrders());
-    };
-
-    const updateCategories = () => {
-      setCategories(getCategories());
-    };
-
-    const handleStorageChange = (event) => {
-      if (event.key === "antikatko-products") {
-        updateProducts();
+    async function loadData() {
+      try {
+        setLoading(true);
+        const [prods, cats, ords] = await Promise.all([
+          adminProductService.list(),
+          adminCategoryService.list(),
+          adminOrderService.list(),
+        ]);
+        setProducts(Array.isArray(prods) ? prods : []);
+        setCategories(Array.isArray(cats) ? cats : []);
+        setOrders(Array.isArray(ords) ? ords : []);
+      } catch (err) {
+        console.error("Failed to load admin data:", err);
+        window.alert("فشل في تحميل البيانات من الخادم. تأكد من تشغيل الـ backend.");
+      } finally {
+        setLoading(false);
       }
-      if (event.key === ORDERS_KEY) {
-        updateOrders();
-      }
-      if (event.key === "antikatko-categories") {
-        updateCategories();
-      }
-    };
+    }
 
-    window.addEventListener("productsUpdated", updateProducts);
-    window.addEventListener("ordersUpdated", updateOrders);
-    window.addEventListener("categoriesUpdated", updateCategories);
-    window.addEventListener("storage", handleStorageChange);
-
-    return () => {
-      window.removeEventListener("productsUpdated", updateProducts);
-      window.removeEventListener("ordersUpdated", updateOrders);
-      window.removeEventListener("categoriesUpdated", updateCategories);
-      window.removeEventListener("storage", handleStorageChange);
-    };
+    loadData();
   }, []);
 
   const filteredProducts = useMemo(() => {
@@ -256,19 +268,26 @@ function AdminApp() {
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
       const customer = order.customer || {};
+      const paymentMethodText = paymentMethodLabels[order.paymentMethod] || order.paymentMethod || "";
+      const paymentStatusText = paymentStatusLabels[order.paymentStatus] || order.paymentStatus || "";
+      const orderStatusText = statusLabels[order.status] || order.status || "";
 
       const searchText = [
         order.id,
         customer.name,
-        customer.email,
         customer.phone,
-        customer.city,
+        customer.email,
+        paymentMethodText,
+        paymentStatusText,
+        orderStatusText,
+        order.paymentMethod,
+        order.paymentStatus,
         order.status,
       ]
         .join(" ")
         .toLowerCase();
 
-      return searchText.includes(orderSearch.toLowerCase());
+      return searchText.includes(orderSearch.trim().toLowerCase());
     });
   }, [orders, orderSearch]);
 
@@ -297,12 +316,20 @@ function AdminApp() {
       }
 
       const existing = customerMap.get(key);
-
       existing.ordersCount += 1;
       existing.orders.push(order);
 
       if (order.status !== "Cancelled") {
-        existing.totalSpent += Number(order.total || 0);
+        const orderFinalTotal =
+          Number(order.finalTotal) ||
+          Number(order.total) ||
+          (Array.isArray(order.items)
+            ? order.items.reduce(
+                (acc, i) => acc + Number(i.price || 0) * Number(i.quantity || 1),
+                0
+              ) + (Number(order.shippingCost) || SHIPPING_COST)
+            : 0);
+        existing.totalSpent += orderFinalTotal;
       }
 
       if (
@@ -321,23 +348,16 @@ function AdminApp() {
     });
 
     return Array.from(customerMap.values()).sort(
-      (a, b) =>
-        new Date(b.lastOrder || 0) - new Date(a.lastOrder || 0)
+      (a, b) => new Date(b.lastOrder || 0) - new Date(a.lastOrder || 0)
     );
   }, [orders]);
 
   const filteredCustomers = useMemo(() => {
     const query = customerSearch.trim().toLowerCase();
-
     if (!query) return customers;
 
     return customers.filter((customer) =>
-      [
-        customer.name,
-        customer.email,
-        customer.phone,
-        customer.city,
-      ]
+      [customer.name, customer.email, customer.phone, customer.city]
         .join(" ")
         .toLowerCase()
         .includes(query)
@@ -350,8 +370,17 @@ function AdminApp() {
       counts[cat.value] = 0;
     });
     products.forEach((product) => {
-      if (product.category && counts[product.category] !== undefined) {
-        counts[product.category] += 1;
+      const catBySlug = categories.find(
+        (c) => c.value === product.category || c.slug === product.category
+      );
+      const catByName = categories.find(
+        (c) =>
+          (c.name || "").toLowerCase() === (product.category || "").toLowerCase() ||
+          (c.name_en || "").toLowerCase() === (product.category || "").toLowerCase()
+      );
+      const matched = catBySlug || catByName;
+      if (matched && counts[matched.value] !== undefined) {
+        counts[matched.value] += 1;
       }
     });
     return counts;
@@ -373,17 +402,16 @@ function AdminApp() {
   const handleImageFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setForm((prev) => ({ ...prev, image: reader.result }));
-    };
-    reader.readAsDataURL(file);
+    setForm((prev) => ({
+      ...prev,
+      image: file,
+      imagePreview: URL.createObjectURL(file),
+    }));
   };
 
   const closeModal = () => {
     setShowModal(false);
-    setForm(initialForm);
+    setForm({ ...initialForm, imagePreview: "" });
     setEditingId(null);
   };
 
@@ -394,6 +422,7 @@ function AdminApp() {
       ...initialForm,
       category: defaultCat.value,
       categoryAr: defaultCat.nameAr,
+      stock: 10,
     });
     setShowModal(true);
   };
@@ -401,22 +430,34 @@ function AdminApp() {
   const openEditModal = (product) => {
     setEditingId(product.id);
 
+    const matchedCat =
+      categories.find((c) => c.value === product.category || c.slug === product.category) ||
+      categories.find(
+        (c) =>
+          (c.name || "").toLowerCase() === (product.category || "").toLowerCase() ||
+          (c.name_en || "").toLowerCase() === (product.category || "").toLowerCase()
+      );
+    const catValue = matchedCat ? matchedCat.value : (categories[0]?.value || "");
+    const catAr = matchedCat ? matchedCat.nameAr : (categories[0]?.nameAr || "");
+
     setForm({
       name: product.name || "",
       nameAr: product.nameAr || "",
       description: product.description || "",
       descriptionAr: product.descriptionAr || "",
-      category: product.category || categories[0]?.value || "Decor",
-      categoryAr: product.categoryAr || categories[0]?.nameAr || "",
+      category: catValue,
+      categoryAr: catAr,
       price: product.price ?? "",
       originalPrice: product.originalPrice ?? "",
       image: product.image || "",
+      imagePreview: "",
+      stock: product.stock !== undefined ? product.stock : 10,
     });
 
     setShowModal(true);
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
 
     const price = Number(form.price);
@@ -424,9 +465,15 @@ function AdminApp() {
       form.originalPrice && String(form.originalPrice).trim()
         ? Number(form.originalPrice)
         : null;
+    const stock = Number(form.stock);
 
     if (!Number.isFinite(price) || price < 0) {
       window.alert("من فضلك أدخل سعرًا صحيحًا.");
+      return;
+    }
+
+    if (!Number.isFinite(stock) || stock < 0) {
+      window.alert("من فضلك أدخل كمية مخزون صحيحة.");
       return;
     }
 
@@ -434,84 +481,102 @@ function AdminApp() {
       originalPrice !== null &&
       (!Number.isFinite(originalPrice) || originalPrice < price)
     ) {
-      window.alert(
-        "السعر قبل الخصم يجب أن يكون أكبر من أو يساوي السعر الحالي."
-      );
+      window.alert("السعر قبل الخصم يجب أن يكون أكبر من أو يساوي السعر الحالي.");
       return;
     }
 
-    const selectedCat = categories.find((c) => c.value === form.category);
+    const selectedCat = categories.find(
+      (c) => (c.value || c.slug) === form.category
+    );
 
-    const productData = {
-      ...form,
-      categoryAr: selectedCat ? selectedCat.nameAr : form.categoryAr,
-      id:
-        editingId !== null
-          ? editingId
-          : Math.max(0, ...products.map((p) => Number(p.id) || 0)) + 1,
+    const existingProduct =
+      editingId !== null
+        ? products.find((product) => String(product.id) === String(editingId))
+        : null;
+
+    const productPayload = {
+      name: form.name,
+      nameAr: form.nameAr,
+      description: form.description,
+      descriptionAr: form.descriptionAr,
+      category: selectedCat ? selectedCat.id : form.category,
       price,
       originalPrice,
+      stock,
+      image: form.image,
+      is_active: existingProduct ? existingProduct.is_active : true,
     };
 
-    let updatedProducts;
+    try {
+      if (editingId !== null) {
+        await adminProductService.update(editingId, productPayload);
+      } else {
+        await adminProductService.create(productPayload);
+      }
 
-    if (editingId !== null) {
-      updatedProducts = products.map((product) =>
-        String(product.id) === String(editingId)
-          ? productData
-          : product
+      const updated = await adminProductService.list();
+      setProducts(Array.isArray(updated) ? updated : []);
+      closeModal();
+    } catch (err) {
+      console.error("Save product error:", err);
+      window.alert(
+        "حدث خطأ أثناء حفظ المنتج: " +
+          (err?.response?.data?.detail || err.message)
       );
-    } else {
-      updatedProducts = [productData, ...products];
     }
-
-    saveProducts(updatedProducts);
-    setProducts(updatedProducts);
-    closeModal();
   };
 
-  const handleDelete = (id) => {
-    const confirmed = window.confirm(
-      "هل أنت متأكد من حذف هذا المنتج؟"
-    );
-
+  const handleDelete = async (id) => {
+    const confirmed = window.confirm("هل أنت متأكد من حذف هذا المنتج؟");
     if (!confirmed) return;
 
-    const updatedProducts = products.filter(
-      (product) => String(product.id) !== String(id)
-    );
-
-    saveProducts(updatedProducts);
-    setProducts(updatedProducts);
+    try {
+      await adminProductService.delete(id);
+      const updated = await adminProductService.list();
+      setProducts(Array.isArray(updated) ? updated : []);
+    } catch (err) {
+      console.error("Delete product error:", err);
+      window.alert("حدث خطأ أثناء حذف المنتج: " + (err?.response?.data?.detail || err.message));
+    }
   };
 
-  const updateOrderStatus = (orderId, newStatus) => {
-    const updatedOrders = orders.map((order) =>
-      String(order.id) === String(orderId)
-        ? { ...order, status: newStatus }
-        : order
-    );
-
-    saveOrders(updatedOrders);
-    setOrders(updatedOrders);
+  const updateOrderStatus = async (orderId, newStatus) => {
+    try {
+      await adminOrderService.updateStatus(orderId, { status: newStatus });
+      const updated = await adminOrderService.list();
+      setOrders(Array.isArray(updated) ? updated : []);
+    } catch (err) {
+      console.error("Update order status error:", err);
+      window.alert("حدث خطأ أثناء تحديث حالة الطلب: " + (err?.response?.data?.detail || err.message));
+    }
   };
 
-  const deleteOrder = (orderId) => {
-    const confirmed = window.confirm(
-      "هل أنت متأكد من حذف هذا الطلب؟"
-    );
+  const updateOrderPaymentStatus = async (orderId, newPaymentStatus) => {
+    try {
+      await adminOrderService.updateStatus(orderId, { payment_status: newPaymentStatus });
+      const updated = await adminOrderService.list();
+      setOrders(Array.isArray(updated) ? updated : []);
+    } catch (err) {
+      console.error("Update payment status error:", err);
+      window.alert("حدث خطأ أثناء تحديث حالة الدفع: " + (err?.response?.data?.detail || err.message));
+    }
+  };
 
+  const deleteOrder = async (orderId) => {
+    const confirmed = window.confirm("هل أنت متأكد من حذف هذا الطلب؟");
     if (!confirmed) return;
 
-    const updatedOrders = orders.filter(
-      (order) => String(order.id) !== String(orderId)
-    );
-
-    saveOrders(updatedOrders);
-    setOrders(updatedOrders);
+    try {
+      await adminOrderService.delete(orderId);
+      const updated = await adminOrderService.list();
+      setOrders(Array.isArray(updated) ? updated : []);
+    } catch (err) {
+      console.error("Delete order error:", err);
+      window.alert("حدث خطأ أثناء حذف الطلب: " + (err?.response?.data?.detail || err.message));
+    }
   };
 
-  const handleAddCategory = (e) => {
+  const handleAddCategory = async (e) => {
     e.preventDefault();
     const name = newCatName.trim();
     const nameAr = newCatNameAr.trim();
@@ -521,33 +586,24 @@ function AdminApp() {
       return;
     }
 
-    const value = name
-      .replace(/[^a-zA-Z0-9]/g, "")
-      .toLowerCase();
-
-    if (!value) {
-      window.alert("اسم التصنيف بالإنجليزية يجب أن يحتوي على حروف صالحة.");
-      return;
+    try {
+      await adminCategoryService.create({ name_en: name, name_ar: nameAr });
+      const updated = await adminCategoryService.list();
+      setCategories(Array.isArray(updated) ? updated : []);
+      setNewCatName("");
+      setNewCatNameAr("");
+    } catch (err) {
+      console.error("Add category error:", err);
+      window.alert("حدث خطأ أثناء إضافة التصنيف: " + (err?.response?.data?.detail || err.message));
     }
-
-    if (categories.some((c) => c.value.toLowerCase() === value)) {
-      window.alert("هذا التصنيف موجود بالفعل.");
-      return;
-    }
-
-    const updated = [...categories, { value, name, nameAr }];
-    saveCategories(updated);
-    setCategories(updated);
-    setNewCatName("");
-    setNewCatNameAr("");
   };
 
   const startEditCategory = (cat) => {
-    setEditingCatValue(cat.value);
-    setEditCatForm({ name: cat.name, nameAr: cat.nameAr });
+    setEditingCatValue(cat.id || cat.value);
+    setEditCatForm({ name: cat.name || cat.name_en || "", nameAr: cat.nameAr || cat.name_ar || "" });
   };
 
-  const handleSaveCategoryEdit = (catValue) => {
+  const handleSaveCategoryEdit = async (catId) => {
     const name = editCatForm.name.trim();
     const nameAr = editCatForm.nameAr.trim();
 
@@ -556,16 +612,18 @@ function AdminApp() {
       return;
     }
 
-    const updated = categories.map((c) =>
-      c.value === catValue ? { ...c, name, nameAr } : c
-    );
-
-    saveCategories(updated);
-    setCategories(updated);
-    setEditingCatValue(null);
+    try {
+      await adminCategoryService.update(catId, { name_en: name, name_ar: nameAr });
+      const updated = await adminCategoryService.list();
+      setCategories(Array.isArray(updated) ? updated : []);
+      setEditingCatValue(null);
+    } catch (err) {
+      console.error("Update category error:", err);
+      window.alert("حدث خطأ أثناء تعديل التصنيف: " + (err?.response?.data?.detail || err.message));
+    }
   };
 
-  const handleDeleteCategory = (catValue) => {
+  const handleDeleteCategory = async (catId, catValue) => {
     const count = categoryProductCounts[catValue] || 0;
     if (count > 0) {
       window.alert(
@@ -577,9 +635,14 @@ function AdminApp() {
     const confirmed = window.confirm("هل أنت متأكد من حذف هذا التصنيف؟");
     if (!confirmed) return;
 
-    const updated = categories.filter((c) => c.value !== catValue);
-    saveCategories(updated);
-    setCategories(updated);
+    try {
+      await adminCategoryService.delete(catId);
+      const updated = await adminCategoryService.list();
+      setCategories(Array.isArray(updated) ? updated : []);
+    } catch (err) {
+      console.error("Delete category error:", err);
+      window.alert("حدث خطأ أثناء حذف التصنيف: " + (err?.response?.data?.detail || err.message));
+    }
   };
 
   const totalValue = products.reduce(
@@ -587,14 +650,20 @@ function AdminApp() {
     0
   );
 
-  const pendingOrders = orders.filter(
-    (order) => order.status === "Pending"
-  ).length;
+  const pendingOrders = orders.filter((order) => order.status === "PENDING" || order.status === "Pending").length;
 
-  const totalOrdersValue = orders.reduce(
-    (total, order) => total + Number(order.total || 0),
-    0
-  );
+  const totalOrdersValue = orders.reduce((total, order) => {
+    const finalT =
+      Number(order.finalTotal) ||
+      Number(order.total) ||
+      (Array.isArray(order.items)
+        ? order.items.reduce(
+            (acc, i) => acc + Number(i.price || 0) * Number(i.quantity || 1),
+            0
+          ) + (Number(order.shippingCost) || SHIPPING_COST)
+        : 0);
+    return total + finalT;
+  }, 0);
 
   const totalCustomers = customers.length;
 
@@ -605,43 +674,126 @@ function AdminApp() {
 
   return (
     <div className="admin-dashboard" dir="rtl">
-      <aside className="admin-sidebar">
-        <div className="admin-brand">
-          <h2>ANTIKATKO</h2>
-          <span>ADMIN PANEL</span>
+      {loading && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(255,255,255,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, fontSize: "1.2rem", fontWeight: 600 }}>
+          جارٍ التحميل...
+        </div>
+      )}
+
+      {/* شريط الموبايل العلوي */}
+      <div className="admin-mobile-topbar">
+        <button
+          type="button"
+          className="admin-menu-toggle"
+          onClick={() => setMobileMenuOpen(true)}
+          aria-label="فتح القائمة"
+        >
+          <Icon name="menu" size={24} />
+        </button>
+        <div className="admin-mobile-brand">
+          <h2>ANTIQUTCO</h2>
+        </div>
+      </div>
+
+      {/* خلفية الـ Overlay عند فتح القائمة بالموبايل */}
+      {mobileMenuOpen && (
+        <div
+          className="admin-sidebar-overlay"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      <aside className={`admin-sidebar ${mobileMenuOpen ? "open" : ""}`}>
+        <div className="admin-sidebar-header-row">
+          <div className="admin-brand">
+            <h2>ANTIQUTCO</h2>
+            <span>ADMIN PANEL</span>
+          </div>
+          <button
+            type="button"
+            className="admin-sidebar-close"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="إغلاق القائمة"
+          >
+            <Icon name="close" size={20} />
+          </button>
         </div>
 
         <div className="admin-nav-label">القائمة الرئيسية</div>
 
-        <a href="#dashboard" className="admin-nav-item active">
+        <a
+          href="#dashboard"
+          className="admin-nav-item active"
+          onClick={() => setMobileMenuOpen(false)}
+        >
           <Icon name="dashboard" />
           لوحة التحكم
         </a>
 
-        <a href="#products" className="admin-nav-item">
+        <a
+          href="#products"
+          className="admin-nav-item"
+          onClick={() => setMobileMenuOpen(false)}
+        >
           <Icon name="package" />
           المنتجات
         </a>
 
-        <a href="#categories" className="admin-nav-item">
+        <a
+          href="#categories"
+          className="admin-nav-item"
+          onClick={() => setMobileMenuOpen(false)}
+        >
           <Icon name="grid" />
           التصنيفات
         </a>
 
-        <a href="#orders" className="admin-nav-item">
+        <a
+          href="#orders"
+          className="admin-nav-item"
+          onClick={() => setMobileMenuOpen(false)}
+        >
           <Icon name="orders" />
           الطلبات
         </a>
 
-        <a href="#customers" className="admin-nav-item">
+        <a
+          href="#customers"
+          className="admin-nav-item"
+          onClick={() => setMobileMenuOpen(false)}
+        >
           <Icon name="users" />
           العملاء
         </a>
 
-        <Link to="/" className="admin-nav-item">
+        <Link
+          to="/"
+          className="admin-nav-item"
+          onClick={() => setMobileMenuOpen(false)}
+        >
           <Icon name="external" />
           العودة للمتجر
         </Link>
+
+        <button
+          type="button"
+          className="admin-nav-item"
+          onClick={() => {
+            setMobileMenuOpen(false);
+            handleLogout();
+          }}
+          style={{
+            width: "100%",
+            border: "none",
+            cursor: "pointer",
+            textAlign: "right",
+            fontFamily: "inherit",
+            background: "transparent",
+          }}
+        >
+          <Icon name="logout" />
+          تسجيل الخروج
+        </button>
 
         <div className="admin-sidebar-footer">
           <span className="admin-status-dot"></span>
@@ -654,19 +806,15 @@ function AdminApp() {
           <div>
             <span className="admin-eyebrow">STORE MANAGEMENT</span>
             <h1>لوحة التحكم</h1>
-            <p>مرحبًا بك في إدارة متجر ANTIKATKO</p>
+            <p>مرحبًا بك في إدارة متجر ANTIQUTCO</p>
           </div>
 
-          <button
-            className="admin-add-button"
-            onClick={openAddModal}
-          >
+          <button className="admin-add-button" onClick={openAddModal}>
             <Icon name="plus" />
             إضافة منتج
           </button>
         </header>
 
-        {/* Dashboard Stats */}
         <section className="admin-stats">
           <div className="admin-stat-card">
             <span className="admin-stat-icon">
@@ -692,7 +840,6 @@ function AdminApp() {
             <h2>{categories.length}</h2>
           </div>
 
-          {/* كارد إجمالي مشتريات العملاء الجديد */}
           <div className="admin-stat-card">
             <span className="admin-stat-icon">
               <Icon name="wallet" size={22} />
@@ -718,12 +865,11 @@ function AdminApp() {
           </div>
         </section>
 
-        {/* Products */}
         <section className="admin-products-section" id="products">
           <div className="admin-section-header">
             <div>
-              <h2>إدارة المنتجات</h2>
-              <p>إضافة وتعديل وحذف منتجات المتجر</p>
+              <h2>إدارة المنتجات والمخزون</h2>
+              <p>إضافة وتعديل وحذف منتجات المتجر ومتابعة الكميات</p>
             </div>
 
             <input
@@ -742,67 +888,94 @@ function AdminApp() {
                   <th>المنتج</th>
                   <th>التصنيف</th>
                   <th>السعر</th>
-                  <th>السعر القديم</th>
+                  <th>المخزون (Stock)</th>
+                  <th>حالة المخزون</th>
                   <th>الإجراءات</th>
                 </tr>
               </thead>
 
               <tbody>
-                {filteredProducts.map((product) => (
-                  <tr key={product.id}>
-                    <td>
-                      <div className="admin-product-info">
-                        <img
-                          src={product.image}
-                          alt={product.name}
-                        />
+                {filteredProducts.map((product) => {
+                  const stockCount = product.stock !== undefined ? Number(product.stock) : 10;
+                  let stockBadgeBg = "#e8f0fe";
+                  let stockBadgeColor = "#1967d2";
+                  let stockText = `${stockCount} متوفر`;
 
-                        <div>
-                          <strong>{product.name}</strong>
-                          <small>{product.nameAr}</small>
+                  if (stockCount === 0) {
+                    stockBadgeBg = "#fae9e5";
+                    stockBadgeColor = "#a34435";
+                    stockText = "نافذ (Out of Stock)";
+                  } else if (stockCount <= 3) {
+                    stockBadgeBg = "#fef7e0";
+                    stockBadgeColor = "#b06000";
+                    stockText = `منخفض (${stockCount})`;
+                  }
+
+                  return (
+                    <tr key={product.id}>
+                      <td>
+                        <div className="admin-product-info">
+                          <img src={product.image} alt={product.name} />
+                          <div>
+                            <strong>{product.name}</strong>
+                            <small>{product.nameAr}</small>
+                          </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td>{product.categoryAr || product.category}</td>
+                      <td>{product.categoryAr || product.category}</td>
 
-                    <td>{formatPrice(product.price)}</td>
+                      <td>{formatPrice(product.price)}</td>
 
-                    <td>
-                      {product.originalPrice
-                        ? formatPrice(product.originalPrice)
-                        : "—"}
-                    </td>
+                      <td>
+                        <strong>{stockCount}</strong>
+                      </td>
 
-                    <td>
-                      <div className="admin-actions">
-                        <button
-                          onClick={() => openEditModal(product)}
-                          className="admin-edit-button"
-                          aria-label="تعديل المنتج"
-                          title="تعديل"
+                      <td>
+                        <span
+                          style={{
+                            background: stockBadgeBg,
+                            color: stockBadgeColor,
+                            padding: "4px 8px",
+                            borderRadius: "4px",
+                            fontSize: "11px",
+                            fontWeight: "600",
+                          }}
                         >
-                          <Icon name="edit" />
-                          تعديل
-                        </button>
+                          {stockText}
+                        </span>
+                      </td>
 
-                        <button
-                          onClick={() => handleDelete(product.id)}
-                          className="admin-delete-button"
-                          aria-label="حذف المنتج"
-                          title="حذف"
-                        >
-                          <Icon name="trash" />
-                          حذف
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      <td>
+                        <div className="admin-actions">
+                          <button
+                            onClick={() => openEditModal(product)}
+                            className="admin-edit-button"
+                            aria-label="تعديل المنتج"
+                            title="تعديل"
+                          >
+                            <Icon name="edit" />
+                            تعديل
+                          </button>
+
+                          <button
+                            onClick={() => handleDelete(product.id)}
+                            className="admin-delete-button"
+                            aria-label="حذف المنتج"
+                            title="حذف"
+                          >
+                            <Icon name="trash" />
+                            حذف
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
 
                 {filteredProducts.length === 0 && (
                   <tr>
-                    <td colSpan="5" className="admin-empty">
+                    <td colSpan="6" className="admin-empty">
                       لا توجد منتجات مطابقة للبحث.
                     </td>
                   </tr>
@@ -812,7 +985,6 @@ function AdminApp() {
           </div>
         </section>
 
-        {/* Categories Management Section */}
         <section
           className="admin-products-section"
           id="categories"
@@ -825,7 +997,6 @@ function AdminApp() {
             </div>
           </div>
 
-          {/* Add Category Form */}
           <form
             onSubmit={handleAddCategory}
             style={{
@@ -863,11 +1034,7 @@ function AdminApp() {
               />
             </label>
 
-            <button
-              type="submit"
-              className="admin-add-button"
-              style={{ height: "42px" }}
-            >
+            <button type="submit" className="admin-add-button" style={{ height: "42px" }}>
               <Icon name="plus" />
               إضافة تصنيف
             </button>
@@ -886,7 +1053,7 @@ function AdminApp() {
               </thead>
               <tbody>
                 {categories.map((cat) => {
-                  const isEditing = editingCatValue === cat.value;
+                  const isEditing = editingCatValue === (cat.id || cat.value);
                   const count = categoryProductCounts[cat.value] || 0;
 
                   return (
@@ -939,7 +1106,7 @@ function AdminApp() {
                             <>
                               <button
                                 className="admin-save-button"
-                                onClick={() => handleSaveCategoryEdit(cat.value)}
+                                onClick={() => handleSaveCategoryEdit(cat.id || cat.value)}
                                 style={{ padding: "6px 12px" }}
                               >
                                 حفظ
@@ -963,7 +1130,7 @@ function AdminApp() {
                               </button>
                               <button
                                 className="admin-delete-button"
-                                onClick={() => handleDeleteCategory(cat.value)}
+                                onClick={() => handleDeleteCategory(cat.id || cat.value, cat.value)}
                                 title={count > 0 ? "لا يمكن الحذف لوجود منتجات مرتبطة" : "حذف"}
                               >
                                 <Icon name="trash" />
@@ -981,21 +1148,16 @@ function AdminApp() {
           </div>
         </section>
 
-        {/* Orders */}
-        <section
-          className="admin-products-section"
-          id="orders"
-          style={{ marginTop: "35px" }}
-        >
+        <section className="admin-products-section" id="orders" style={{ marginTop: "35px" }}>
           <div className="admin-section-header">
             <div>
               <h2>إدارة الطلبات</h2>
-              <p>متابعة طلبات العملاء وتحديث حالة كل طلب</p>
+              <p>متابعة طلبات العملاء وطرق الدفع وتحديث حالة الدفع والطلب</p>
             </div>
 
             <input
               type="search"
-              placeholder="ابحث برقم الطلب أو اسم العميل..."
+              placeholder="ابحث برقم الطلب، اسم العميل، الهاتف، أو الدفع..."
               value={orderSearch}
               onChange={(e) => setOrderSearch(e.target.value)}
               className="admin-search"
@@ -1003,7 +1165,7 @@ function AdminApp() {
           </div>
 
           <div style={{ marginBottom: "18px" }}>
-            <strong>إجمالي قيمة الطلبات: </strong>
+            <strong>إجمالي قيمة الطلبات (شامل الشحن): </strong>
             <span>{formatPrice(totalOrdersValue)}</span>
           </div>
 
@@ -1013,10 +1175,11 @@ function AdminApp() {
                 <tr>
                   <th>رقم الطلب</th>
                   <th>العميل</th>
-                  <th>الهاتف</th>
                   <th>التاريخ</th>
-                  <th>الإجمالي</th>
-                  <th>الحالة</th>
+                  <th>الإجمالي النهائي</th>
+                  <th>طريقة الدفع</th>
+                  <th>حالة الدفع</th>
+                  <th>حالة الطلب</th>
                   <th>الإجراءات</th>
                 </tr>
               </thead>
@@ -1024,51 +1187,77 @@ function AdminApp() {
               <tbody>
                 {filteredOrders.map((order) => {
                   const customer = order.customer || {};
-                  const isExpanded =
-                    String(expandedOrder) === String(order.id);
+                  const isExpanded = String(expandedOrder) === String(order.id);
+
+                  const itemsSubtotal =
+                    Number(order.subtotal) ||
+                    (Array.isArray(order.items)
+                      ? order.items.reduce(
+                          (acc, i) => acc + Number(i.price || 0) * Number(i.quantity || 1),
+                          0
+                        )
+                      : Number(order.total) || 0);
+
+                  const orderShipping = Number(order.shippingCost) || SHIPPING_COST;
+                  const orderFinalTotal =
+                    Number(order.finalTotal) || Number(order.total) || itemsSubtotal + orderShipping;
+
+                  const currentPaymentStatus =
+                    order.paymentStatus || (order.paymentMethod === "cash_on_delivery" ? "UNPAID" : "PENDING");
+                  const currentPaymentMethodKey = order.paymentMethod || "cash_on_delivery";
 
                   return (
                     <React.Fragment key={order.id}>
                       <tr>
-                        <td>
-                          <strong>{order.id}</strong>
-                        </td>
-
+                        <td><strong>{order.order_number || order.id}</strong></td>
                         <td>
                           <div>
                             <strong>{customer.name || "—"}</strong>
-                            <small style={{ display: "block" }}>
-                              {customer.email || ""}
-                            </small>
+                            <small style={{ display: "block" }}>{customer.phone || customer.email || ""}</small>
                           </div>
                         </td>
-
-                        <td>{customer.phone || "—"}</td>
-
                         <td>{formatDate(order.createdAt)}</td>
-
+                        <td><strong>{formatPrice(orderFinalTotal)}</strong></td>
                         <td>
-                          <strong>{formatPrice(order.total)}</strong>
+                          <span style={{ fontSize: "12px", color: "#493728", fontWeight: "600" }}>
+                            {paymentMethodLabels[currentPaymentMethodKey] || currentPaymentMethodKey}
+                          </span>
                         </td>
-
                         <td>
                           <select
-                            value={
-                              orderStatuses.includes(order.status)
-                                ? order.status
-                                : "Pending"
-                            }
-                            onChange={(e) =>
-                              updateOrderStatus(order.id, e.target.value)
-                            }
-                            aria-label="حالة الطلب"
+                            value={paymentStatuses.includes(currentPaymentStatus) ? currentPaymentStatus : "UNPAID"}
+                            onChange={(e) => updateOrderPaymentStatus(order.id, e.target.value)}
+                            aria-label="حالة الدفع"
                             style={{
-                              padding: "8px",
+                              padding: "6px 8px",
                               borderRadius: "6px",
                               border: "1px solid #d8cbb7",
                               background: "#fff",
                               color: "#493728",
-                              maxWidth: "145px",
+                              fontSize: "11px",
+                              maxWidth: "130px",
+                            }}
+                          >
+                            {paymentStatuses.map((pStatus) => (
+                              <option key={pStatus} value={pStatus}>
+                                {paymentStatusLabels[pStatus]}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <select
+                            value={orderStatuses.includes(order.status) ? order.status : "PENDING"}
+                            onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                            aria-label="حالة الطلب"
+                            style={{
+                              padding: "6px 8px",
+                              borderRadius: "6px",
+                              border: "1px solid #d8cbb7",
+                              background: "#fff",
+                              color: "#493728",
+                              fontSize: "11px",
+                              maxWidth: "135px",
                             }}
                           >
                             {orderStatuses.map((status) => (
@@ -1078,25 +1267,16 @@ function AdminApp() {
                             ))}
                           </select>
                         </td>
-
                         <td>
                           <div className="admin-actions">
                             <button
                               className="admin-edit-button"
-                              onClick={() =>
-                                setExpandedOrder(
-                                  isExpanded ? null : order.id
-                                )
-                              }
+                              onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
                             >
                               <Icon name="eye" />
                               {isExpanded ? "إخفاء" : "التفاصيل"}
                             </button>
-
-                            <button
-                              className="admin-delete-button"
-                              onClick={() => deleteOrder(order.id)}
-                            >
+                            <button className="admin-delete-button" onClick={() => deleteOrder(order.id)}>
                               <Icon name="trash" />
                               حذف
                             </button>
@@ -1106,50 +1286,64 @@ function AdminApp() {
 
                       {isExpanded && (
                         <tr>
-                          <td colSpan="7">
+                          <td colSpan="8">
                             <div
                               style={{
-                                padding: "15px",
+                                padding: "18px",
                                 background: "#faf7f1",
                                 borderRadius: "8px",
                                 lineHeight: "2",
+                                border: "1px solid #e8dfd1",
                               }}
                             >
-                              <h3>تفاصيل الطلب</h3>
+                              <h3 style={{ color: "#80632e", marginBottom: "12px" }}>
+                                تفاصيل الطلب المالية والشحن
+                              </h3>
 
-                              <p>
-                                <strong>العنوان: </strong>
-                                {customer.address || "—"}
-                              </p>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "15px" }}>
+                                <div>
+                                  <p><strong>اسم العميل: </strong> {customer.name || "—"}</p>
+                                  <p><strong>رقم الهاتف: </strong> {customer.phone || "—"}</p>
+                                  <p><strong>البريد الإلكتروني: </strong> {customer.email || "—"}</p>
+                                  <p><strong>العنوان: </strong> {customer.address || "—"}</p>
+                                  <p><strong>المدينة: </strong> {customer.city || "—"}</p>
+                                </div>
+                                <div>
+                                  <p><strong>طريقة الدفع: </strong> {paymentMethodLabels[currentPaymentMethodKey] || currentPaymentMethodKey}</p>
+                                  <p><strong>حالة الدفع: </strong> {paymentStatusLabels[currentPaymentStatus] || currentPaymentStatus}</p>
+                                  <p><strong>حالة الطلب: </strong> {statusLabels[order.status] || order.status || "قيد الانتظار"}</p>
+                                  <p><strong>ملاحظات العميل: </strong> {customer.notes || order.notes || "لا توجد ملاحظات"}</p>
+                                </div>
+                              </div>
 
-                              <p>
-                                <strong>المدينة: </strong>
-                                {customer.city || "—"}
-                              </p>
+                              <div style={{ background: "#fff", padding: "15px", borderRadius: "6px", border: "1px solid #e8dfd1", marginBottom: "15px" }}>
+                                <h4 style={{ color: "#80632e", marginTop: "0" }}>المنتجات المطلوبة:</h4>
+                                {Array.isArray(order.items) && order.items.length > 0 ? (
+                                  order.items.map((item, index) => (
+                                    <div key={`${item.id}-${index}`} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f0ebe4" }}>
+                                      <span>{item.nameAr || item.name || "منتج"} × {item.quantity || 1}</span>
+                                      <strong>{formatPrice(Number(item.price || 0) * Number(item.quantity || 1))}</strong>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p>لا توجد تفاصيل للمنتجات.</p>
+                                )}
+                              </div>
 
-                              <p>
-                                <strong>ملاحظات: </strong>
-                                {customer.notes || "لا توجد ملاحظات"}
-                              </p>
-
-                              <h4>المنتجات:</h4>
-
-                              {Array.isArray(order.items) &&
-                              order.items.length > 0 ? (
-                                order.items.map((item, index) => (
-                                  <div key={`${item.id}-${index}`}>
-                                    {item.nameAr || item.name || "منتج"} ×{" "}
-                                    {item.quantity || 1}
-                                    {" — "}
-                                    {formatPrice(
-                                      Number(item.price || 0) *
-                                        Number(item.quantity || 1)
-                                    )}
-                                  </div>
-                                ))
-                              ) : (
-                                <p>لا توجد تفاصيل للمنتجات.</p>
-                              )}
+                              <div style={{ background: "#fffdfa", padding: "12px 15px", borderRadius: "6px", border: "1px solid #d8cbb7", display: "grid", gap: "6px", maxWidth: "320px", marginLeft: "auto" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                  <span>قيمة المنتجات (Subtotal):</span>
+                                  <strong>{formatPrice(itemsSubtotal)}</strong>
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                  <span>تكلفة الشحن (Shipping Cost):</span>
+                                  <strong>{formatPrice(orderShipping)}</strong>
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #d8cbb7", paddingTop: "6px", color: "#80632e", fontWeight: "700" }}>
+                                  <span>الإجمالي النهائي (Final Total):</span>
+                                  <span>{formatPrice(orderFinalTotal)}</span>
+                                </div>
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -1160,10 +1354,8 @@ function AdminApp() {
 
                 {filteredOrders.length === 0 && (
                   <tr>
-                    <td colSpan="7" className="admin-empty">
-                      {orders.length === 0
-                        ? "لا توجد طلبات حتى الآن."
-                        : "لا توجد طلبات مطابقة للبحث."}
+                    <td colSpan="8" className="admin-empty">
+                      {orders.length === 0 ? "لا توجد طلبات حتى الآن." : "لا توجد طلبات مطابقة للبحث."}
                     </td>
                   </tr>
                 )}
@@ -1172,12 +1364,7 @@ function AdminApp() {
           </div>
         </section>
 
-        {/* Customers */}
-        <section
-          className="admin-products-section"
-          id="customers"
-          style={{ marginTop: "35px" }}
-        >
+        <section className="admin-products-section" id="customers" style={{ marginTop: "35px" }}>
           <div className="admin-section-header">
             <div>
               <h2>إدارة العملاء</h2>
@@ -1232,37 +1419,22 @@ function AdminApp() {
 
               <tbody>
                 {filteredCustomers.map((customer) => {
-                  const isExpanded =
-                    expandedCustomer === customer.key;
+                  const isExpanded = expandedCustomer === customer.key;
 
                   return (
                     <React.Fragment key={customer.key}>
                       <tr>
-                        <td>
-                          <strong>{customer.name || "عميل بدون اسم"}</strong>
-                        </td>
-
+                        <td><strong>{customer.name || "عميل بدون اسم"}</strong></td>
                         <td>{customer.email || "—"}</td>
                         <td>{customer.phone || "—"}</td>
                         <td>{customer.city || "—"}</td>
                         <td>{customer.ordersCount}</td>
-
-                        <td>
-                          <strong>
-                            {formatPrice(customer.totalSpent)}
-                          </strong>
-                        </td>
-
+                        <td><strong>{formatPrice(customer.totalSpent)}</strong></td>
                         <td>{formatDate(customer.lastOrder)}</td>
-
                         <td>
                           <button
                             className="admin-edit-button"
-                            onClick={() =>
-                              setExpandedCustomer(
-                                isExpanded ? null : customer.key
-                              )
-                            }
+                            onClick={() => setExpandedCustomer(isExpanded ? null : customer.key)}
                           >
                             <Icon name="eye" />
                             {isExpanded ? "إخفاء" : "الطلبات"}
@@ -1274,38 +1446,40 @@ function AdminApp() {
                         <tr>
                           <td colSpan="8">
                             <div className="admin-customer-details">
-                              <h3>طلبات العميل</h3>
-
-                              <p>
-                                <strong>العنوان: </strong>
-                                {customer.address || "—"}
-                              </p>
+                              <h3>طلبات العميل وطرق الدفع</h3>
+                              <p><strong>العنوان: </strong>{customer.address || "—"}</p>
 
                               <div className="admin-customer-order-list">
-                                {customer.orders.map((order) => (
-                                  <div
-                                    className="admin-customer-order"
-                                    key={order.id}
-                                  >
-                                    <div>
-                                      <strong>{order.id}</strong>
-                                      <small>
-                                        {formatDate(order.createdAt)}
-                                      </small>
-                                    </div>
+                                {customer.orders.map((order) => {
+                                  const cSubtotal =
+                                    Number(order.subtotal) ||
+                                    (Array.isArray(order.items)
+                                      ? order.items.reduce(
+                                          (acc, i) => acc + Number(i.price || 0) * Number(i.quantity || 1),
+                                          0
+                                        )
+                                      : Number(order.total) || 0);
+                                  const cShip = Number(order.shippingCost) || SHIPPING_COST;
+                                  const cFinal = Number(order.finalTotal) || Number(order.total) || cSubtotal + cShip;
+                                  const cPayMethod = paymentMethodLabels[order.paymentMethod] || order.paymentMethod || "الدفع عند الاستلام";
+                                  const cPayStatus = paymentStatusLabels[order.paymentStatus] || order.paymentStatus || "غير مسدد";
 
-                                    <div>
-                                      <strong>
-                                        {formatPrice(order.total)}
-                                      </strong>
-                                      <small>
-                                        {statusLabels[order.status] ||
-                                          order.status ||
-                                          "قيد الانتظار"}
-                                      </small>
+                                  return (
+                                    <div className="admin-customer-order" key={order.id}>
+                                      <div>
+                                        <strong>{order.id}</strong>
+                                        <small>{formatDate(order.createdAt)}</small>
+                                        <small style={{ color: "#80632e" }}>
+                                          طريقة الدفع: {cPayMethod} | حالة الدفع: {cPayStatus}
+                                        </small>
+                                      </div>
+                                      <div>
+                                        <strong>{formatPrice(cFinal)}</strong>
+                                        <small>{statusLabels[order.status] || order.status || "قيد الانتظار"}</small>
+                                      </div>
                                     </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </div>
                           </td>
@@ -1329,7 +1503,6 @@ function AdminApp() {
           </div>
         </section>
 
-        {/* Product Modal */}
         {showModal && (
           <div
             className="admin-modal-overlay"
@@ -1339,13 +1512,8 @@ function AdminApp() {
           >
             <form className="admin-modal" onSubmit={handleSave}>
               <div className="admin-modal-header">
-                <h2>
-                  {editingId !== null
-                    ? "تعديل المنتج"
-                    : "إضافة منتج جديد"}
-                </h2>
-
-                <button type="button" onClick={closeModal}>
+                <h2>{editingId !== null ? "تعديل المنتج" : "إضافة منتج جديد"}</h2>
+                <button type="button" onClick={closeModal} aria-label="إغلاق">
                   <Icon name="close" />
                 </button>
               </div>
@@ -1355,9 +1523,7 @@ function AdminApp() {
                   اسم المنتج بالإنجليزية
                   <input
                     value={form.name}
-                    onChange={(e) =>
-                      updateField("name", e.target.value)
-                    }
+                    onChange={(e) => updateField("name", e.target.value)}
                     required
                   />
                 </label>
@@ -1366,9 +1532,7 @@ function AdminApp() {
                   اسم المنتج بالعربية
                   <input
                     value={form.nameAr}
-                    onChange={(e) =>
-                      updateField("nameAr", e.target.value)
-                    }
+                    onChange={(e) => updateField("nameAr", e.target.value)}
                     required
                   />
                 </label>
@@ -1378,9 +1542,7 @@ function AdminApp() {
                   <textarea
                     rows="2"
                     value={form.description}
-                    onChange={(e) =>
-                      updateField("description", e.target.value)
-                    }
+                    onChange={(e) => updateField("description", e.target.value)}
                     placeholder="Enter product description..."
                     style={{
                       width: "100%",
@@ -1388,6 +1550,7 @@ function AdminApp() {
                       borderRadius: "6px",
                       border: "1px solid #e5dccf",
                       fontFamily: "inherit",
+                      boxSizing: "border-box",
                     }}
                   />
                 </label>
@@ -1397,9 +1560,7 @@ function AdminApp() {
                   <textarea
                     rows="2"
                     value={form.descriptionAr}
-                    onChange={(e) =>
-                      updateField("descriptionAr", e.target.value)
-                    }
+                    onChange={(e) => updateField("descriptionAr", e.target.value)}
                     placeholder="اكتب وصف المنتج بالعربية..."
                     style={{
                       width: "100%",
@@ -1407,6 +1568,7 @@ function AdminApp() {
                       borderRadius: "6px",
                       border: "1px solid #e5dccf",
                       fontFamily: "inherit",
+                      boxSizing: "border-box",
                     }}
                   />
                 </label>
@@ -1415,9 +1577,7 @@ function AdminApp() {
                   التصنيف
                   <select
                     value={form.category}
-                    onChange={(e) =>
-                      updateField("category", e.target.value)
-                    }
+                    onChange={(e) => updateField("category", e.target.value)}
                   >
                     {categories.map((cat) => (
                       <option key={cat.value} value={cat.value}>
@@ -1443,9 +1603,7 @@ function AdminApp() {
                     min="0"
                     step="0.01"
                     value={form.price}
-                    onChange={(e) =>
-                      updateField("price", e.target.value)
-                    }
+                    onChange={(e) => updateField("price", e.target.value)}
                     required
                   />
                 </label>
@@ -1457,9 +1615,19 @@ function AdminApp() {
                     min="0"
                     step="0.01"
                     value={form.originalPrice}
-                    onChange={(e) =>
-                      updateField("originalPrice", e.target.value)
-                    }
+                    onChange={(e) => updateField("originalPrice", e.target.value)}
+                  />
+                </label>
+
+                <label>
+                  كمية المخزون (Stock)
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={form.stock}
+                    onChange={(e) => updateField("stock", e.target.value)}
+                    required
                   />
                 </label>
 
@@ -1469,15 +1637,15 @@ function AdminApp() {
                     type="file"
                     accept="image/*"
                     onChange={handleImageFileChange}
-                    style={{ padding: "8px", border: "1px solid #e5dccf", borderRadius: "6px", background: "#fff" }}
+                    style={{ padding: "8px", border: "1px solid #e5dccf", borderRadius: "6px", background: "#fff", width: "100%", boxSizing: "border-box" }}
                   />
                 </label>
 
-                {form.image && form.image.trim() && (
+                {(form.imagePreview || (typeof form.image === "string" && form.image.trim())) && (
                   <div className="admin-full-width">
                     <p>معاينة الصورة:</p>
                     <img
-                      src={form.image}
+                      src={form.imagePreview || form.image}
                       alt="معاينة المنتج"
                       style={{
                         width: "120px",
@@ -1491,18 +1659,10 @@ function AdminApp() {
               </div>
 
               <div className="admin-modal-actions">
-                <button
-                  type="button"
-                  className="admin-cancel-button"
-                  onClick={closeModal}
-                >
+                <button type="button" className="admin-cancel-button" onClick={closeModal}>
                   إلغاء
                 </button>
-
-                <button
-                  type="submit"
-                  className="admin-save-button"
-                >
+                <button type="submit" className="admin-save-button">
                   حفظ المنتج
                 </button>
               </div>

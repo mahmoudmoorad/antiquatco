@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { getProducts } from "../data/products";
+import { getProducts, refreshProductsFromBackend } from "../data/products";
 import ProductCard from "../components/ProductCard";
 import { useLanguage } from "../context/LanguageContext";
 import translations from "../data/translations";
@@ -13,6 +13,8 @@ function Home() {
   const [products, setProducts] = useState(getProducts);
 
   useEffect(() => {
+    refreshProductsFromBackend();
+
     const updateProducts = () => {
       setProducts(getProducts());
     };
@@ -47,7 +49,7 @@ function Home() {
       </section>
 
       {/* 2. Categories */}
-      <section className="categories">
+      {/* <section className="categories">
         <div className="section-heading">
           <span>{t.categoriesTag}</span>
           <h2>{t.categoriesTitle}</h2>
@@ -86,7 +88,7 @@ function Home() {
             <h3>{t.art}</h3>
           </Link>
         </div>
-      </section>
+      </section> */}
 
       {/* 3. Best Sellers / Featured */}
       <section className="products-section">

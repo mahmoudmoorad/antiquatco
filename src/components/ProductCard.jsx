@@ -139,9 +139,7 @@ function ProductCard({ product }) {
           onClick={handleAddToCart}
         >
           <CartIcon />
-          <span>
-            {isArabic ? "أضف إلى السلة" : "Add to Cart"}
-          </span>
+          <span>{isArabic ? "أضف إلى السلة" : "Add to Cart"}</span>
         </button>
       </div>
     </article>

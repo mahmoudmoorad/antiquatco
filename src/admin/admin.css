@@ -4,6 +4,51 @@
   background: #f6f2eb;
   color: #30251e;
   font-family: "Cairo", sans-serif;
+  box-sizing: border-box;
+}
+
+/* شريط التصفح العلوي للموبايل */
+.admin-mobile-topbar {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: #30251e;
+  color: #fff;
+  z-index: 1000;
+  padding: 0 16px;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
+.admin-menu-toggle {
+  background: transparent;
+  border: none;
+  color: #d4af37;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-mobile-brand h2 {
+  font-family: "Playfair Display", serif;
+  color: #d4af37;
+  font-size: 18px;
+  margin: 0;
+  letter-spacing: 1.5px;
+}
+
+.admin-sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1001;
 }
 
 .admin-sidebar {
@@ -15,6 +60,24 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  z-index: 1002;
+  transition: transform 0.3s ease;
+}
+
+.admin-sidebar-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 25px;
+}
+
+.admin-sidebar-close {
+  display: none;
+  background: transparent;
+  border: none;
+  color: #d4af37;
+  cursor: pointer;
+  padding: 6px;
 }
 
 .admin-brand {
@@ -26,6 +89,7 @@
   font-family: "Playfair Display", serif;
   letter-spacing: 2px;
   font-size: 22px;
+  margin: 0;
 }
 
 .admin-brand span,
@@ -52,6 +116,7 @@
   font-size: 13px;
   margin-bottom: 8px;
   transition: 0.2s;
+  box-sizing: border-box;
 }
 
 .admin-nav-item span {
@@ -85,6 +150,7 @@
   flex: 1;
   min-width: 0;
   padding: 40px;
+  box-sizing: border-box;
 }
 
 .admin-header {
@@ -131,7 +197,7 @@
   transform: translateY(-1px);
 }
 
-/* تعديل الـ Stats لتعرض الكروت الستة في صف واحد */
+/* الكروت الإحصائية الستة */
 .admin-stats {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -146,6 +212,7 @@
   border-radius: 12px;
   padding: 18px 15px;
   box-shadow: 0 4px 15px #30251e08;
+  box-sizing: border-box;
 }
 
 .admin-stat-icon {
@@ -198,6 +265,7 @@
 .admin-table-wrapper {
   overflow-x: auto;
   border-radius: 8px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .admin-table {
@@ -244,6 +312,7 @@
   object-fit: cover;
   border-radius: 7px;
   background: #eee7dc;
+  flex-shrink: 0;
 }
 
 .admin-product-info strong,
@@ -362,8 +431,9 @@
   background: #1e1712aa;
   display: grid;
   place-items: center;
-  padding: 20px;
+  padding: 16px;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .admin-modal {
@@ -375,6 +445,7 @@
   border-radius: 12px;
   box-sizing: border-box;
   box-shadow: 0 15px 50px #0003;
+  margin: auto;
 }
 
 .admin-modal-header {
@@ -386,6 +457,7 @@
 
 .admin-modal-header h2 {
   font-size: 19px;
+  margin: 0;
 }
 
 .admin-modal-header button {
@@ -435,6 +507,7 @@
   display: flex;
   gap: 10px;
   margin-top: 25px;
+  justify-content: flex-end;
 }
 
 .admin-cancel-button {
@@ -465,7 +538,7 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
-/* الشاشات المتوسطة والصغيرة للإحصائيات والتجاوب */
+/* التجاوب والشاشات الصغيرة للموبايل والتابلت */
 @media (max-width: 1400px) {
   .admin-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -473,36 +546,50 @@ select:focus-visible {
 }
 
 @media (max-width: 900px) {
+  .admin-mobile-topbar {
+    display: flex;
+  }
+
   .admin-sidebar {
-    width: 190px;
-    padding: 25px 13px;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 280px;
+    transform: translateX(100%);
+    box-shadow: -5px 0 25px rgba(0,0,0,0.3);
+  }
+
+  .admin-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .admin-sidebar-close {
+    display: flex;
+  }
+
+  .admin-sidebar-overlay {
+    display: block;
   }
 
   .admin-main {
-    padding: 25px 18px;
+    padding: 85px 16px 30px 16px;
   }
 
   .admin-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-header {
+    position: static;
+    background: transparent;
+    padding: 0 0 15px 0;
   }
 }
 
 @media (max-width: 650px) {
   .admin-dashboard {
     display: block;
-  }
-
-  .admin-sidebar {
-    width: 100%;
-    padding: 16px;
-  }
-
-  .admin-brand {
-    margin-bottom: 15px;
-  }
-
-  .admin-sidebar-footer {
-    margin-top: 12px;
   }
 
   .admin-stats {
@@ -533,7 +620,7 @@ select:focus-visible {
   }
 
   .admin-main {
-    padding: 20px 12px;
+    padding: 75px 12px 20px 12px;
   }
 
   .admin-form-grid {
@@ -546,6 +633,7 @@ select:focus-visible {
 
   .admin-modal {
     padding: 18px;
+    width: 100%;
   }
 
   .admin-modal-actions {
@@ -579,6 +667,7 @@ select:focus-visible {
   background: #faf7f1;
   border: 1px solid #e8dfd1;
   border-radius: 10px;
+  box-sizing: border-box;
 }
 
 .admin-customer-summary p {

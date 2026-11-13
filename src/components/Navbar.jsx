@@ -1,16 +1,32 @@
-import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
-import { useState } from "react";
+
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 
 import { useCart } from "../context/CartContext";
 import { useWishlist } from "../context/WishlistContext";
 import { useLanguage } from "../context/LanguageContext";
+import { useAuth } from "../context/AuthContext";
 
 import translations from "../data/translations";
-import products from "../data/products";
+import { getProducts } from "../data/products";
+
+/* ==========================================
+   NAVBAR ICONS
+   ========================================== */
 
 function SearchIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      width="21"
+      height="21"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <circle cx="10.8" cy="10.8" r="6.8" />
       <path d="m16 16 4.2 4.2" />
     </svg>
@@ -19,7 +35,17 @@ function SearchIcon() {
 
 function HeartIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      width="21"
+      height="21"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z" />
     </svg>
   );
@@ -27,7 +53,17 @@ function HeartIcon() {
 
 function BagIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      width="21"
+      height="21"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M5 8h14l1 13H4L5 8Z" />
       <path d="M9 8V6a3 3 0 0 1 6 0v2" />
     </svg>
@@ -36,7 +72,17 @@ function BagIcon() {
 
 function AccountIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      width="21"
+      height="21"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <circle cx="12" cy="8" r="3.5" />
       <path d="M5 20c.7-3.4 3.2-5.2 7-5.2s6.3 1.8 7 5.2" />
     </svg>
@@ -45,47 +91,89 @@ function AccountIcon() {
 
 function MenuIcon({ open }) {
   return open ? (
-    <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      width="23"
+      height="23"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
       <path d="m6 6 12 12M18 6 6 18" />
     </svg>
   ) : (
-    <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      width="23"
+      height="23"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
       <path d="M4 7h16M4 12h16M4 17h16" />
     </svg>
   );
 }
 
+/* ==========================================
+   NAVBAR COMPONENT
+   ========================================== */
+
 function Navbar() {
   const navigate = useNavigate();
-  const location = useLocation();
 
   const { cartCount, openCart } = useCart();
   const { wishlistItems } = useWishlist();
-
   const { language, isArabic, toggleLanguage } = useLanguage();
+  const { user } = useAuth();
 
   const t = translations[language];
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [navProducts, setNavProducts] = useState(getProducts);
+
+  /* Update products when admin changes them */
+
+  useEffect(() => {
+    const update = () => setNavProducts(getProducts());
+
+    window.addEventListener("productsUpdated", update);
+
+    return () => {
+      window.removeEventListener("productsUpdated", update);
+    };
+  }, []);
+
+  /* Search Results */
 
   const searchResults = searchTerm.trim()
-    ? products.filter((product) => {
+    ? navProducts.filter((product) => {
         const query = searchTerm.trim().toLowerCase();
 
         return (
-          product.name.toLowerCase().includes(query) ||
-          product.category.toLowerCase().includes(query)
+          (product.name && product.name.toLowerCase().includes(query)) ||
+          (product.nameAr && product.nameAr.toLowerCase().includes(query)) ||
+          (product.category && product.category.toLowerCase().includes(query)) ||
+          (product.categoryAr && product.categoryAr.toLowerCase().includes(query))
         );
       })
     : [];
+
+  /* Format Product Price */
 
   const formatPrice = (price) => {
     const locale = isArabic ? "ar-EG" : "en-US";
 
     return `${Number(price).toLocaleString(locale)} ${t.common.currency}`;
   };
+
+  /* Search Handler */
 
   const handleSearch = (event) => {
     event.preventDefault();
@@ -98,7 +186,11 @@ function Navbar() {
 
     setSearchOpen(false);
     setMobileMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   };
 
   const closeSearch = () => {
@@ -111,24 +203,29 @@ function Navbar() {
 
   const scrollToTop = () => {
     closeMobileMenu();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   };
+
+  const accountLink = user ? "/profile" : "/login";
 
   return (
     <header className="navbar">
       <div className="navbar-inner">
 
-        {/* Logo */}
-        <Link
-          to="/"
-          className="logo"
-          onClick={scrollToTop}
-        >
-          ANTIKATKO<span>.</span>
+        {/* LOGO */}
+
+        <Link to="/" className="logo" onClick={scrollToTop}>
+          ANTIQUTCO<span></span>
         </Link>
 
-        {/* Main Navigation */}
+        {/* MAIN NAVIGATION */}
+
         <nav
+          dir={isArabic ? "rtl" : "ltr"}
           className={`nav-links ${mobileMenuOpen ? "is-open" : ""}`}
           aria-label="Main navigation"
         >
@@ -143,23 +240,73 @@ function Navbar() {
           <NavLink to="/contact" onClick={scrollToTop}>
             {t.nav.contact}
           </NavLink>
+
+          {/* MOBILE FAVORITES */}
+
+          <Link
+            to="/wishlist"
+            className="mobile-menu-favorites"
+            onClick={scrollToTop}
+          >
+            <span className="mobile-menu-item-content">
+              <HeartIcon />
+              <span>{t.nav.favorites}</span>
+            </span>
+
+            {wishlistItems.length > 0 && (
+              <span className="mobile-wishlist-count">
+                {wishlistItems.length}
+              </span>
+            )}
+          </Link>
+
+          {/* MOBILE FOOTER */}
+
+          <div className="mobile-menu-footer">
+
+            {/* ACCOUNT */}
+
+            <Link
+              to={accountLink}
+              className="mobile-account-link"
+              onClick={scrollToTop}
+              aria-label={t.nav.account}
+            >
+              <AccountIcon />
+              <span>{t.nav.account}</span>
+            </Link>
+
+            {/* LANGUAGE */}
+
+            <button
+              type="button"
+              className="mobile-language-toggle"
+              onClick={toggleLanguage}
+              aria-label={isArabic ? "Switch to English" : "التغيير إلى العربية"}
+            >
+              {t.nav.language}
+            </button>
+
+          </div>
         </nav>
 
-        {/* Navbar Actions */}
+        {/* NAVBAR ACTIONS */}
+
         <div className="nav-actions">
 
-          {/* Language Toggle */}
+          {/* DESKTOP LANGUAGE */}
+
           <button
             type="button"
             className="language-toggle"
             onClick={toggleLanguage}
             aria-label={isArabic ? "Switch to English" : "التغيير إلى العربية"}
-            title={isArabic ? "English" : "العربية"}
           >
             {t.nav.language}
           </button>
 
-          {/* Live Search */}
+          {/* SEARCH */}
+
           <div className={`nav-search ${searchOpen ? "is-open" : ""}`}>
 
             {searchOpen && (
@@ -197,10 +344,13 @@ function Navbar() {
               )}
             </button>
 
-            {/* Live Search Results */}
-            {searchOpen && searchTerm.trim() && (
-              <div className="live-search-dropdown">
+            {/* LIVE SEARCH RESULTS */}
 
+            {searchOpen && searchTerm.trim() && (
+              <div
+                className="live-search-dropdown"
+                dir={isArabic ? "rtl" : "ltr"}
+              >
                 {searchResults.length > 0 ? (
                   <>
                     <div className="live-search-heading">
@@ -220,16 +370,20 @@ function Navbar() {
                       >
                         <img
                           src={product.image}
-                          alt={product.name}
+                          alt={isArabic ? product.nameAr || product.name : product.name}
                         />
 
                         <div className="live-search-info">
                           <span className="live-search-name">
-                            {product.name}
+                            {isArabic
+                              ? product.nameAr || product.name
+                              : product.name}
                           </span>
 
                           <span className="live-search-category">
-                            {product.category}
+                            {isArabic
+                              ? product.categoryAr || product.category
+                              : product.category}
                           </span>
 
                           <span className="live-search-price">
@@ -259,15 +413,16 @@ function Navbar() {
                     <span>{t.search.tryAnother}</span>
                   </div>
                 )}
-
               </div>
             )}
+
           </div>
 
-          {/* Account */}
+          {/* DESKTOP ACCOUNT */}
+
           <Link
-            to="/login"
-            className="nav-icon-link"
+            to={accountLink}
+            className="nav-icon-link desktop-account-link"
             aria-label={t.nav.account}
             title={t.nav.account}
             onClick={scrollToTop}
@@ -275,10 +430,11 @@ function Navbar() {
             <AccountIcon />
           </Link>
 
-          {/* Favorites */}
+          {/* DESKTOP FAVORITES */}
+
           <Link
             to="/wishlist"
-            className="nav-icon-link nav-count-link"
+            className="nav-icon-link nav-count-link desktop-favorites-link"
             aria-label={`${t.nav.favorites}, ${wishlistItems.length}`}
             title={t.nav.favorites}
             onClick={scrollToTop}
@@ -292,7 +448,8 @@ function Navbar() {
             )}
           </Link>
 
-          {/* Shopping Cart */}
+          {/* SHOPPING CART */}
+
           <button
             type="button"
             className="nav-icon-link nav-cart-button"
@@ -309,7 +466,8 @@ function Navbar() {
             )}
           </button>
 
-          {/* Mobile Menu */}
+          {/* MOBILE MENU TOGGLE */}
+
           <button
             type="button"
             className="mobile-menu-toggle"

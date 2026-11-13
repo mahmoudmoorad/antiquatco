@@ -1,16 +1,19 @@
 
 import { useEffect } from "react";
+
 import {
   BrowserRouter,
   Routes,
   Route,
   useLocation,
+  Navigate,
+  Link,
 } from "react-router-dom";
 
 import { LanguageProvider } from "./context/LanguageContext";
 import { CartProvider } from "./context/CartContext";
 import { WishlistProvider } from "./context/WishlistContext";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
@@ -26,8 +29,10 @@ import OrderConfirmation from "./pages/OrderConfirmation";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Contact from "./pages/Contact";
+import Profile from "./pages/Profile";
 
 import AdminApp from "./admin/AdminApp";
+import AdminLogin from "./pages/admin/AdminLogin";
 
 import "./App.css";
 import "./commerce.css";
@@ -43,6 +48,67 @@ function ScrollToTop() {
   }, [pathname]);
 
   return null;
+}
+
+// Protect Admin Dashboard
+function AdminRoute({ children }) {
+  const { user, loading, isAdmin } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="admin-route-loading">
+        Verifying access...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Navigate
+        to="/admin/login"
+        state={{ from: location.pathname }}
+        replace
+      />
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="admin-access-denied" dir="rtl">
+        <h2>غير مصرح بالدخول</h2>
+
+        <p>
+          ليس لديك صلاحية الوصول إلى هذه الصفحة.
+        </p>
+
+        <Link to="/">
+          العودة إلى المتجر
+        </Link>
+      </div>
+    );
+  }
+
+  return children;
+}
+
+// Protect Customer Profile
+function ProfileRoute() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{ padding: "80px", textAlign: "center" }}>
+        جاري التحقق من الحساب...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Profile />;
 }
 
 function Storefront() {
@@ -67,6 +133,8 @@ function Storefront() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/contact" element={<Contact />} />
+
+        <Route path="/profile" element={<ProfileRoute />} />
       </Routes>
 
       <Footer />
@@ -84,7 +152,23 @@ function App() {
               <ScrollToTop />
 
               <Routes>
-                <Route path="/admin/*" element={<AdminApp />} />
+                {/* Public Admin Login */}
+                <Route
+                  path="/admin/login"
+                  element={<AdminLogin />}
+                />
+
+                {/* Protected Admin Dashboard */}
+                <Route
+                  path="/admin/*"
+                  element={
+                    <AdminRoute>
+                      <AdminApp />
+                    </AdminRoute>
+                  }
+                />
+
+                {/* Customer Storefront */}
                 <Route path="/*" element={<Storefront />} />
               </Routes>
             </BrowserRouter>

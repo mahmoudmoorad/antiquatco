@@ -246,3 +246,24 @@ footer h2 {
     grid-template-columns: 1fr;
   }
 }
+
+/* مثال للتعديل في ملف CSS الخاص بك (مثل commerce.css أو index.css) */
+@media screen and (max-width: 768px) {
+  /* تأكد من أن الحاوية الأب التي تجمع الـ form والـ summary هي flex أو grid */
+  .checkout-layout, 
+  .checkout-page {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* إعطاء Cart Summary ترتيب أول (يظهر للأعلى) */
+  .cart-summary {
+    order: 1 !important;
+  }
+
+  /* إعطاء Checkout Form ترتيب ثانٍ (يظهر أسفل الـ summary) */
+  .checkout-form {
+    order: 2 !important;
+  }
+}
+

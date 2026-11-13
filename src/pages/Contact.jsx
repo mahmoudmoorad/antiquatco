@@ -1,6 +1,7 @@
 
 import { useState } from "react";
 import { useLanguage } from "../context/LanguageContext";
+import contactService from "../services/contactService";
 
 function Contact() {
   const { language } = useLanguage();
@@ -14,6 +15,8 @@ function Contact() {
   });
 
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
+  const [sending, setSending] = useState(false);
 
   const content = isArabic
     ? {
@@ -31,8 +34,7 @@ function Contact() {
         collectionDescription:
           "تحف وقطع كلاسيكية فريدة، لكل منها حكايتها الخاصة.",
         formTitle: "أرسل لنا رسالة",
-        success:
-          "شكرًا لك! تم استلام رسالتك في هذه النسخة التجريبية.",
+        success: "شكرًا لك! تم استلام رسالتك بنجاح وسنتواصل معك قريبًا.",
         name: "الاسم",
         namePlaceholder: "اكتب اسمك",
         email: "البريد الإلكتروني",
@@ -60,8 +62,7 @@ function Contact() {
         collectionDescription:
           "Unique antiques and vintage finds, each with its own story.",
         formTitle: "Send Us a Message",
-        success:
-          "Thank you! Your message has been received in this demo.",
+        success: "Thank you! Your message was sent successfully. We'll get back to you soon.",
         name: "Your Name",
         namePlaceholder: "Enter your name",
         email: "Email Address",
@@ -86,17 +87,24 @@ function Contact() {
     setSubmitted(false);
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-
-    setSubmitted(true);
-
-    setFormData({
-      name: "",
-      email: "",
-      subject: "",
-      message: "",
-    });
+    setError("");
+    setSending(true);
+    try {
+      await contactService.submitContact(formData);
+      setSubmitted(true);
+      setFormData({ name: "", email: "", subject: "", message: "" });
+    } catch (err) {
+      console.error("Contact form error:", err);
+      setError(
+        isArabic
+          ? "حدث خطأ أثناء إرسال الرسالة. يرجى المحاولة مرة أخرى."
+          : "An error occurred while sending your message. Please try again."
+      );
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -109,7 +117,7 @@ function Contact() {
 
       <section className="contact-container">
         <div className="contact-info">
-          <span className="contact-eyebrow">ANTIKATKO</span>
+          <span className="contact-eyebrow">ANTIQUTCO</span>
 
           <h2>{content.infoTitle}</h2>
           <p>{content.infoDescription}</p>
@@ -137,6 +145,12 @@ function Contact() {
           {submitted && (
             <p className="contact-success" role="status">
               {content.success}
+            </p>
+          )}
+
+          {error && (
+            <p className="contact-error" role="alert" style={{ color: "red", marginBottom: "1rem" }}>
+              {error}
             </p>
           )}
 
@@ -193,11 +207,12 @@ function Contact() {
           <button
             type="submit"
             className="btn-primary contact-submit"
+            disabled={sending}
           >
-            {content.send}
+            {sending ? (isArabic ? "جارٍ الإرسال..." : "Sending...") : content.send}
           </button>
 
-          <small>{content.demo}</small>
+          <small style={{ display: "none" }}>{content.demo}</small>
         </form>
       </section>
     </main>

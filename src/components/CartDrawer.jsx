@@ -51,7 +51,7 @@ function CartDrawer() {
       >
         <div className="cart-drawer-header">
           <div>
-            <span>ANTIKATKO</span>
+            <span>ANTIQUTCO</span>
             <h2>{t.title}</h2>
             <p>
               {cartItems.length} {t.pieces}

@@ -1,13 +1,21 @@
-
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import translations from "../data/translations";
+import orderService from "../services/orderService";
+import { getAccessToken } from "../services/api"; // 🔥 استيراد دالة التوكن لجلب توكن المستخدم المسجل
+
+const SHIPPING_COST = 100;
 
 function Checkout() {
-  const { cartItems, cartTotal, clearCart } = useCart();
+  const {
+    cartItems,
+    cartTotal,
+    clearCart,
+  } = useCart();
+
   const { user } = useAuth();
   const { language } = useLanguage();
 
@@ -17,6 +25,8 @@ function Checkout() {
 
   const navigate = useNavigate();
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [form, setForm] = useState({
     name: user?.name || "",
     email: user?.email || "",
@@ -24,6 +34,7 @@ function Checkout() {
     address: "",
     city: "",
     notes: "",
+    paymentMethod: "cash_on_delivery",
   });
 
   const update = (event) => {
@@ -41,44 +52,80 @@ function Checkout() {
     )} ${currency}`;
   };
 
-  const submitOrder = (event) => {
+  const subtotal = cartTotal;
+  const finalTotal = subtotal > 0 ? subtotal + SHIPPING_COST : 0;
+
+  const submitOrder = async (event) => {
     event.preventDefault();
 
-    if (!cartItems.length) return;
+    if (isSubmitting || !cartItems.length) return;
 
-    const order = {
-      id: `ANT-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      customer: form,
-      items: cartItems,
-      total: cartTotal,
-      status: "Pending",
-    };
-
-    let previousOrders = [];
+    setIsSubmitting(true);
 
     try {
-      previousOrders = JSON.parse(
-        localStorage.getItem("antikatko-orders") || "[]"
-      );
+      // 1. جلب التوكن الخاص بالمستخدم الحالي لربط الأوردر بحسابه الشخصي في الداتا بيز
+      const token = getAccessToken();
 
-      if (!Array.isArray(previousOrders)) {
-        previousOrders = [];
+      // تجهيز الـ payload المتوافق مع CheckoutSerializer في Django Backend
+      const checkoutPayload = {
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        address: form.address,
+        city: form.city,
+        governorate: form.city, // Backend falls back governorate to city if needed
+        notes: form.notes,
+        payment_method: form.paymentMethod,
+        items: cartItems.map((item) => ({
+          product_id: item.id,
+          quantity: Number(item.quantity),
+        })),
+      };
+
+      // 2. تعديل طريقة الإرسال أو تمرير الهيدر بحيث يتضمن التوكن (حسب تصميم orderService لديك)
+      // إذا كان orderService.checkout يقبل إعدادات إضافية، أو يمكنك إرساله مباشرة عبر الـ fetch أو تمريره للخدمة:
+      let createdOrder;
+      if (orderService.checkout.length > 1 || typeof orderService.checkout === "function") {
+        // إذا كنت تستخدم orderService مباشرة، يمكنك تعديله أو إرسال الهيدر من خلاله
+        // ولضمان عملها بشكل مباشر ومضمون 100%، نقوم بإرسال الطلب مع الـ Authorization Header:
+        const response = await fetch("http://127.0.0.1:8000/api/v1/orders/checkout/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(checkoutPayload),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw data;
+        }
+        createdOrder = data.data || data;
+      } else {
+        createdOrder = await orderService.checkout(checkoutPayload);
       }
-    } catch {
-      previousOrders = [];
+
+      // تفريغ السلة بعد نجاح الطلب
+      clearCart();
+
+      // الانتقال لصفحة تأكيد الطلب برقم الطلب الحقيقي من الداتا بيز
+      navigate(`/order-confirmation/${createdOrder.order_number || createdOrder.id}`, {
+        state: { order: createdOrder },
+      });
+    } catch (error) {
+      console.error("Order creation failed:", error);
+
+      const errorMessage =
+        error?.data?.message ||
+        error?.message ||
+        (isArabic
+          ? "حدث خطأ أثناء إنشاء الطلب. تأكد من توفر المخزون وحاول مرة أخرى."
+          : "An error occurred while creating your order. Please check stock and try again.");
+
+      window.alert(errorMessage);
+      setIsSubmitting(false);
     }
-
-    localStorage.setItem(
-      "antikatko-orders",
-      JSON.stringify([order, ...previousOrders])
-    );
-
-    clearCart();
-
-    navigate(`/order-confirmation/${order.id}`, {
-      state: { order },
-    });
   };
 
   if (!cartItems.length) {
@@ -97,7 +144,9 @@ function Checkout() {
     <main className="checkout-page">
       <section className="shop-header">
         <span>
-          {isArabic ? "أصبحت القطعة قريبة منك" : "ALMOST YOURS"}
+          {isArabic
+            ? "أصبحت القطعة قريبة منك"
+            : "ALMOST YOURS"}
         </span>
 
         <h1>{t.title}</h1>
@@ -179,8 +228,148 @@ function Checkout() {
             />
           </label>
 
+          {/* Payment Methods */}
+          <h2>
+            {isArabic ? "طريقة الدفع" : "Payment Method"}
+          </h2>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "12px",
+              marginBottom: "20px",
+            }}
+          >
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                padding: "12px 15px",
+                background: "#faf7f1",
+                borderRadius: "8px",
+                border: "1px solid #e8dfd1",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="cash_on_delivery"
+                checked={
+                  form.paymentMethod === "cash_on_delivery"
+                }
+                onChange={update}
+              />
+
+              <div>
+                <strong>
+                  {isArabic
+                    ? "الدفع عند الاستلام"
+                    : "Cash on Delivery"}
+                </strong>
+
+                <p
+                  style={{
+                    margin: "2px 0 0",
+                    fontSize: "11px",
+                    color: "#827365",
+                  }}
+                >
+                  {isArabic
+                    ? "ادفع نقداً عند استلام طلبك"
+                    : "Pay with cash upon delivery"}
+                </p>
+              </div>
+            </label>
+
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                padding: "12px 15px",
+                background: "#faf7f1",
+                borderRadius: "8px",
+                border: "1px solid #e8dfd1",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="vodafone_cash"
+                checked={
+                  form.paymentMethod === "vodafone_cash"
+                }
+                onChange={update}
+              />
+
+              <div>
+                <strong>
+                  {isArabic ? "فودافون كاش" : "Vodafone Cash"}
+                </strong>
+
+                <p
+                  style={{
+                    margin: "2px 0 0",
+                    fontSize: "11px",
+                    color: "#827365",
+                  }}
+                >
+                  {isArabic
+                    ? "تحويل رقمي يتم مراجعته وتأكيده من الإدارة"
+                    : "Digital transfer verified by admin"}
+                </p>
+              </div>
+            </label>
+
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                padding: "12px 15px",
+                background: "#faf7f1",
+                borderRadius: "8px",
+                border: "1px solid #e8dfd1",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="instapay"
+                checked={form.paymentMethod === "instapay"}
+                onChange={update}
+              />
+
+              <div>
+                <strong>
+                  {isArabic
+                    ? "انستاباي (InstaPay)"
+                    : "InstaPay"}
+                </strong>
+
+                <p
+                  style={{
+                    margin: "2px 0 0",
+                    fontSize: "11px",
+                    color: "#827365",
+                  }}
+                >
+                  {isArabic
+                    ? "تحويل فوري يتم مراجعته وتأكيده من الإدارة"
+                    : "Instant transfer verified by admin"}
+                </p>
+              </div>
+            </label>
+          </div>
+
           <label>
-            {isArabic ? "ملاحظات الطلب (اختياري)" : "Order Notes (Optional)"}
+            {isArabic
+              ? "ملاحظات الطلب (اختياري)"
+              : "Order Notes (Optional)"}
 
             <textarea
               name="notes"
@@ -195,14 +384,22 @@ function Checkout() {
             />
           </label>
 
-          <button className="btn-primary" type="submit">
-            {t.placeOrder}
+          <button
+            className="btn-primary"
+            type="submit"
+            disabled={isSubmitting}
+          >
+            {isSubmitting
+              ? isArabic
+                ? "جاري إنشاء الطلب..."
+                : "Placing Order..."
+              : t.placeOrder}
           </button>
 
           <p className="checkout-disclaimer">
             {isArabic
-              ? "هذه نسخة تجريبية؛ يتم حفظ الطلب في هذا المتصفح فقط، ولا تتم معالجة أي مدفوعات إلكترونية."
-              : "Demo checkout: your order is saved in this browser only. No payment is processed."}
+              ? "يتم حفظ الطلب عبر خوادم ANTIQUTCO الآمنة وتحديث المخزون فوراً."
+              : "Your order is securely processed and stock is updated instantly."}
           </p>
         </form>
 
@@ -216,13 +413,18 @@ function Checkout() {
                 : item.name;
 
             return (
-              <div className="checkout-line" key={item.id}>
+              <div
+                className="checkout-line"
+                key={item.id}
+              >
                 <span>
                   {productName} × {item.quantity}
                 </span>
 
                 <strong>
-                  {formatPrice(item.price * item.quantity)}
+                  {formatPrice(
+                    Number(item.price) * item.quantity
+                  )}
                 </strong>
               </div>
             );
@@ -230,22 +432,17 @@ function Checkout() {
 
           <div className="cart-total-row">
             <span>{t.subtotal}</span>
-
-            <strong>{formatPrice(cartTotal)}</strong>
+            <strong>{formatPrice(subtotal)}</strong>
           </div>
 
           <div className="cart-total-row">
             <span>{t.shipping}</span>
-
-            <strong>
-              {isArabic ? "يحدد لاحقًا" : "To be confirmed"}
-            </strong>
+            <strong>{formatPrice(SHIPPING_COST)}</strong>
           </div>
 
           <div className="cart-total-row">
             <span>{t.total}</span>
-
-            <strong>{formatPrice(cartTotal)}</strong>
+            <strong>{formatPrice(finalTotal)}</strong>
           </div>
 
           <Link

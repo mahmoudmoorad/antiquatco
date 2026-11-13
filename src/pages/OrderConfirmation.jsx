@@ -21,16 +21,40 @@ function OrderConfirmation() {
         localStorage.getItem("antikatko-orders") || "[]"
       );
 
-      order = orders.find((item) => item.id === orderId);
+      order = Array.isArray(orders)
+        ? orders.find((item) => item.id === orderId)
+        : null;
     } catch {
       order = null;
     }
   }
 
   const formatPrice = (price) => {
-    return `${Number(price).toLocaleString(
+    return `${Number(price || 0).toLocaleString(
       isArabic ? "ar-EG" : "en-US"
     )} ${currency}`;
+  };
+
+  const paymentMethods = {
+    vodafone_cash: isArabic ? "فودافون كاش" : "Vodafone Cash",
+    instapay: "InstaPay",
+    cash_on_delivery: isArabic ? "الدفع عند الاستلام" : "Cash on Delivery",
+  };
+
+  const paymentStatuses = {
+    Pending: isArabic ? "في انتظار تأكيد الدفع" : "Awaiting Payment Confirmation",
+    Unpaid: isArabic ? "غير مدفوع" : "Unpaid",
+    Paid: isArabic ? "تم الدفع" : "Paid",
+    Failed: isArabic ? "فشل الدفع" : "Payment Failed",
+  };
+
+  const orderStatuses = {
+    Pending: isArabic ? "قيد الانتظار" : "Pending",
+    Confirmed: isArabic ? "تم تأكيد الطلب" : "Confirmed",
+    Processing: isArabic ? "جاري التجهيز" : "Processing",
+    Shipped: isArabic ? "تم الشحن" : "Shipped",
+    Delivered: isArabic ? "تم التسليم" : "Delivered",
+    Cancelled: isArabic ? "ملغي" : "Cancelled",
   };
 
   return (
@@ -38,43 +62,107 @@ function OrderConfirmation() {
       <span>ANTIKATKO</span>
 
       <div className="confirmation-icon">
-        ✓
+        <svg
+          width="38"
+          height="38"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
       </div>
 
       <h1>
-        {isArabic
-          ? "شكرًا لطلبك!"
-          : "Thank You For Your Order"}
+        {isArabic ? "شكرًا لطلبك!" : "Thank You For Your Order"}
       </h1>
 
       {order ? (
         <>
           <p>
             {isArabic
-              ? "تم تسجيل طلبك بنجاح. شكرًا لاختيارك ANTIKATKO."
-              : "Your order has been recorded successfully. Thank you for choosing ANTIKATKO."}
+              ? "تم تسجيل طلبك بنجاح. شكرًا لاختيارك ANTIQUTCO."
+              : "Your order has been recorded successfully. Thank you for choosing ANTIQUTCO."}
           </p>
 
-          <p>
-            <strong>
-              {isArabic ? "رقم الطلب:" : "Order Number:"}
-            </strong>{" "}
-            {order.id}
-          </p>
+          <div className="confirmation-details">
+            <p>
+              <strong>
+                {isArabic ? "رقم الطلب:" : "Order Number:"}
+              </strong>{" "}
+              {order.id}
+            </p>
 
-          <p>
-            <strong>
-              {isArabic ? "الإجمالي:" : "Total:"}
-            </strong>{" "}
-            {formatPrice(order.total)}
-          </p>
+            <p>
+              <strong>
+                {isArabic ? "حالة الطلب:" : "Order Status:"}
+              </strong>{" "}
+              {orderStatuses[order.status] || order.status}
+            </p>
 
-          <p>
-            <strong>
-              {isArabic ? "حالة الطلب:" : "Order Status:"}
-            </strong>{" "}
-            {isArabic ? "قيد الانتظار" : order.status}
-          </p>
+            <p>
+              <strong>
+                {isArabic ? "طريقة الدفع:" : "Payment Method:"}
+              </strong>{" "}
+              {paymentMethods[order.paymentMethod] ||
+                (isArabic ? "غير محددة" : "Not specified")}
+            </p>
+
+            <p>
+              <strong>
+                {isArabic ? "حالة الدفع:" : "Payment Status:"}
+              </strong>{" "}
+              {paymentStatuses[order.paymentStatus] ||
+                order.paymentStatus ||
+                (isArabic ? "غير محددة" : "Not specified")}
+            </p>
+
+            <div className="confirmation-price-breakdown">
+              <p>
+                <strong>
+                  {isArabic ? "قيمة المنتجات:" : "Subtotal:"}
+                </strong>{" "}
+                {formatPrice(
+                  order.subtotal ?? order.total
+                )}
+              </p>
+
+              <p>
+                <strong>
+                  {isArabic ? "تكلفة الشحن:" : "Shipping:"}
+                </strong>{" "}
+                {formatPrice(order.shippingCost ?? 0)}
+              </p>
+
+              <p className="confirmation-total">
+                <strong>
+                  {isArabic ? "الإجمالي النهائي:" : "Final Total:"}
+                </strong>{" "}
+                {formatPrice(order.total)}
+              </p>
+            </div>
+          </div>
+
+          {order.paymentMethod === "cash_on_delivery" && (
+            <p>
+              {isArabic
+                ? "سيتم تحصيل قيمة الطلب عند استلامه."
+                : "Your order amount will be collected upon delivery."}
+            </p>
+          )}
+
+          {(order.paymentMethod === "vodafone_cash" ||
+            order.paymentMethod === "instapay") && (
+            <p>
+              {isArabic
+                ? "يرجى إتمام التحويل، وسيتم مراجعة الدفع قبل تأكيد الطلب."
+                : "Please complete the transfer. Your payment will be reviewed before the order is confirmed."}
+            </p>
+          )}
         </>
       ) : (
         <p>

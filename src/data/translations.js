@@ -178,7 +178,7 @@ const translations = {
       newsletterDescription: "كن أول من يعرف أحدث القطع والمجموعات الجديدة.",
       emailPlaceholder: "أدخل بريدك الإلكتروني",
       subscribe: "اشتراك",
-      copyright: "جميع الحقوق محفوظة لـ ANTIKATKO.",
+      copyright: "جميع الحقوق محفوظة لـ ANTIQUTCO.",
     },
 
     common: {
@@ -373,7 +373,7 @@ const translations = {
       newsletterDescription: "Be the first to discover new pieces and collections.",
       emailPlaceholder: "Enter your email address",
       subscribe: "Subscribe",
-      copyright: "All Rights Reserved to ANTIKATKO.",
+      copyright: "All Rights Reserved to ANTIQUTCO.",
     },
 
     common: {

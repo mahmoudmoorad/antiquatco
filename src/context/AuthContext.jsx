@@ -4,101 +4,210 @@ import {
   useContext,
   useEffect,
   useState,
+  useCallback,
 } from "react";
+
+import authService from "../services/authService";
+
+import {
+  getAccessToken,
+  getRefreshToken,
+  clearAuthTokens,
+} from "../services/api";
 
 const AuthContext = createContext(null);
 
-const STORAGE_KEY = "antikatko-demo-user";
+const STORAGE_KEY = "antikatko-auth-user";
 
-function getSavedUser() {
+function clearSavedUser() {
   try {
-    const savedUser = localStorage.getItem(STORAGE_KEY);
-
-    if (!savedUser) return null;
-
-    const parsedUser = JSON.parse(savedUser);
-
-    if (
-      !parsedUser ||
-      typeof parsedUser.email !== "string" ||
-      !parsedUser.email.trim()
-    ) {
-      return null;
-    }
-
-    return {
-      name: parsedUser.name || parsedUser.email.split("@")[0],
-      email: parsedUser.email.trim().toLowerCase(),
-    };
-  } catch {
-    return null;
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (error) {
+    console.warn("Failed to clear saved user:", error);
   }
 }
 
-// Temporary frontend authentication.
-// This will be connected to Django REST API later.
+function normalizeUser(userData) {
+  if (!userData || !userData.email) {
+    return null;
+  }
+
+  const role = String(userData.role || "").toUpperCase();
+
+  return {
+    ...userData,
+    name:
+      userData.name ||
+      userData.full_name ||
+      `${userData.first_name || ""} ${userData.last_name || ""}`.trim() ||
+      userData.username ||
+      userData.email.split("@")[0],
+
+    isAdmin:
+      role === "ADMIN" ||
+      userData.isAdmin === true ||
+      userData.is_admin === true ||
+      userData.is_staff === true,
+  };
+}
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(getSavedUser);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Persist the current demo session.
-  useEffect(() => {
+  const updateUserState = useCallback((userData) => {
+    const normalizedUser = normalizeUser(userData);
+
+    if (!normalizedUser) {
+      setUser(null);
+      clearSavedUser();
+      return null;
+    }
+
+    setUser(normalizedUser);
+
     try {
-      if (user) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
-      }
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(normalizedUser)
+      );
     } catch (error) {
-      console.error("Unable to save user session:", error);
-    }
-  }, [user]);
-
-  // Login with a demo session.
-  const login = (email, name = "") => {
-    const cleanEmail = email.trim().toLowerCase();
-
-    if (!cleanEmail) {
-      throw new Error("Email is required.");
+      console.warn("Failed to save user:", error);
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      throw new Error("Please enter a valid email address.");
+    return normalizedUser;
+  }, []);
+
+  const clearSession = useCallback(() => {
+    clearAuthTokens();
+    updateUserState(null);
+  }, [updateUserState]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function validateSession() {
+      const accessToken = getAccessToken();
+      const refreshToken = getRefreshToken();
+
+      if (!accessToken && !refreshToken) {
+        clearSession();
+
+        if (isMounted) {
+          setLoading(false);
+        }
+
+        return;
+      }
+
+      try {
+        const userData = await authService.getCurrentUser();
+
+        if (isMounted) {
+          updateUserState(userData);
+        }
+      } catch (error) {
+        console.warn("Session validation failed:", error.message);
+
+        if (isMounted) {
+          clearSession();
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
     }
 
-    const demoUser = {
-      name: name.trim() || cleanEmail.split("@")[0],
-      email: cleanEmail,
+    validateSession();
+
+    const handleAuthExpired = () => {
+      if (isMounted) {
+        clearSession();
+        setLoading(false);
+      }
     };
 
-    setUser(demoUser);
+    window.addEventListener("authExpired", handleAuthExpired);
 
-    return demoUser;
-  };
+    return () => {
+      isMounted = false;
+      window.removeEventListener("authExpired", handleAuthExpired);
+    };
+  }, [updateUserState, clearSession]);
 
-  // Register a demo user.
-  const register = (name, email) => {
-    const cleanName = name.trim();
-    const cleanEmail = email.trim().toLowerCase();
+  const login = async (email, password) => {
+    const { user: loggedInUser, tokens } = await authService.login(
+      email,
+      password
+    );
 
-    if (!cleanName || !cleanEmail) {
-      throw new Error("Name and email are required.");
+    if (!tokens?.access || !loggedInUser) {
+      clearSession();
+      throw new Error("Invalid login response.");
     }
 
-    return login(cleanEmail, cleanName);
+    const normalizedUser = updateUserState(loggedInUser);
+
+    if (!normalizedUser) {
+      clearSession();
+      throw new Error("Invalid user data.");
+    }
+
+    return normalizedUser;
   };
 
-  // Logout.
-  const logout = () => {
-    setUser(null);
+  /**
+   * Start registration.
+   * No user session is created at this stage.
+   */
+  const register = async (name, email, password) => {
+    return authService.register({
+      name,
+      email,
+      password,
+    });
+  };
+
+  /**
+   * Complete registration after successful email OTP verification.
+   */
+  const verifyRegistration = async (email, otp) => {
+    const { user: newUser, tokens } =
+      await authService.verifyRegistration(email, otp);
+
+    if (!tokens?.access || !newUser) {
+      clearSession();
+      throw new Error("Invalid registration verification response.");
+    }
+
+    const normalizedUser = updateUserState(newUser);
+
+    if (!normalizedUser) {
+      clearSession();
+      throw new Error("Invalid user data.");
+    }
+
+    return normalizedUser;
+  };
+
+  const logout = async () => {
+    try {
+      await authService.logout();
+    } finally {
+      clearSession();
+    }
   };
 
   const value = {
     user,
     login,
     register,
+    verifyRegistration,
     logout,
+    loading,
     isAuthenticated: Boolean(user),
+    isAdmin: Boolean(user?.isAdmin),
   };
 
   return (
@@ -117,3 +226,5 @@ export function useAuth() {
 
   return context;
 }
+
+export default AuthContext;

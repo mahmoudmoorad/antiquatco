@@ -5,6 +5,8 @@ import { useSearchParams } from "react-router-dom";
 import {
   getProducts,
   getCategories,
+  refreshProductsFromBackend,
+  refreshCategoriesFromBackend,
 } from "../data/products";
 
 import ProductCard from "../components/ProductCard";
@@ -27,6 +29,9 @@ function Shop() {
 
   // Listen for product and category updates
   useEffect(() => {
+    refreshProductsFromBackend();
+    refreshCategoriesFromBackend();
+
     const updateProducts = () => {
       setProducts(getProducts());
     };
@@ -108,7 +113,10 @@ function Shop() {
 
       const matchesCategory =
         selectedCategory === "All" ||
-        product.category === selectedCategory;
+        String(product.category).toLowerCase() === String(selectedCategory).toLowerCase() ||
+        String(product.categoryAr).toLowerCase() === String(selectedCategory).toLowerCase() ||
+        (product.category_details && String(product.category_details.slug).toLowerCase() === String(selectedCategory).toLowerCase()) ||
+        (product.category_details && String(product.category_details.value).toLowerCase() === String(selectedCategory).toLowerCase());
 
       return matchesSearch && matchesCategory;
     });
