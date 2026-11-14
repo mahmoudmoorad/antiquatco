@@ -1,23 +1,40 @@
+
 """
-Base settings for ANTIKATKO project.
+Base settings for ANTIQUTCO project.
 Optimized and configured for React/Vite frontend integration.
 """
+
 from datetime import timedelta
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
+from corsheaders.defaults import default_headers
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Load .env file
 load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = os.getenv("SECRET_KEY", "insecure-dev-key-change-me-for-production-antikatko")
+# Security
+SECRET_KEY = os.getenv(
+    "SECRET_KEY",
+    "insecure-dev-key-change-me-for-production-antikatko"
+)
+
 DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes")
 
-ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,*").split(",") if h.strip()]
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.getenv(
+        "ALLOWED_HOSTS",
+        "localhost,127.0.0.1,*"
+    ).split(",")
+    if h.strip()
+]
 
 # Application definition
+
 DJANGO_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -56,8 +73,9 @@ LOCAL_APPS = [
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",  # يجب أن يكون في السطر الأول تماماً
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -88,7 +106,9 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
 # Database configuration
+
 DB_ENGINE = os.getenv("DB_ENGINE", "postgresql").lower()
+
 if DB_ENGINE == "sqlite":
     DATABASES = {
         "default": {
@@ -110,49 +130,81 @@ else:
     }
 
 # Custom User Model
+
 AUTH_USER_MODEL = "accounts.User"
 
 # Password validation
+
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 8},
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"
+    },
 ]
 
 # Internationalization
+
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Africa/Cairo"
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
+# Static files
+
 STATIC_URL = os.getenv("STATIC_URL", "/static/")
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else []
+
+STATICFILES_DIRS = (
+    [BASE_DIR / "static"]
+    if (BASE_DIR / "static").exists()
+    else []
+)
+
+STATICFILES_STORAGE = (
+    "whitenoise.storage.CompressedManifestStaticFilesStorage"
+)
 
 # Media files
+
 MEDIA_URL = os.getenv("MEDIA_URL", "/media/")
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# --- EMAIL CONFIGURATION (SMTP / Development) ---
+# Email configuration
+
 EMAIL_BACKEND = os.getenv(
-    "EMAIL_BACKEND", 
+    "EMAIL_BACKEND",
     "django.core.mail.backends.smtp.EmailBackend"
 )
+
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
-EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-DEFAULT_FROM_EMAIL = os.getenv(
-    "DEFAULT_FROM_EMAIL", 
-    "ANTIKATKO <noreply@antikatko.com>"
+
+EMAIL_USE_TLS = (
+    os.getenv("EMAIL_USE_TLS", "True").lower()
+    in ("true", "1", "yes")
 )
 
-# --- CORS configuration (تم ضبطها لتفادي أي أخطاء اتصال نهائياً) ---
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    "ANTIQUTCO <noreply@antikatko.com>"
+)
+
+# CORS configuration
+
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
@@ -172,14 +224,13 @@ CORS_ALLOW_METHODS = [
     "PUT",
 ]
 
-from corsheaders.defaults import default_headers
-
 CORS_ALLOW_HEADERS = [
     *default_headers,
     "x-guest-token",
 ]
 
 # Django REST Framework
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -200,8 +251,14 @@ REST_FRAMEWORK = {
 }
 
 # Simple JWT Configuration
-JWT_ACCESS_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", "60"))
-JWT_REFRESH_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_LIFETIME_DAYS", "7"))
+
+JWT_ACCESS_MINUTES = int(
+    os.getenv("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", "60")
+)
+
+JWT_REFRESH_DAYS = int(
+    os.getenv("JWT_REFRESH_TOKEN_LIFETIME_DAYS", "7")
+)
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=JWT_ACCESS_MINUTES),
@@ -217,10 +274,14 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_id",
 }
 
-# OpenAPI / Swagger (drf-spectacular)
+# OpenAPI / Swagger
+
 SPECTACULAR_SETTINGS = {
-    "TITLE": "ANTIKATKO E-Commerce API",
-    "DESCRIPTION": "Production REST API for ANTIKATKO vintage furniture, antiques, and home decorations platform",
+    "TITLE": "ANTIQUTCO E-Commerce API",
+    "DESCRIPTION": (
+        "Production REST API for ANTIQUTCO vintage furniture, "
+        "antiques, and home decorations platform"
+    ),
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
@@ -228,5 +289,6 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Business constants
-SHIPPING_COST = 100.00  # 100 EGP per order
+
+SHIPPING_COST = 100.00
 LOW_STOCK_THRESHOLD = 3
