@@ -44,14 +44,14 @@ class AuthenticationService:
     @staticmethod
     def send_verification_email(email, otp, purpose):
         if purpose == OTPVerification.Purpose.REGISTRATION:
-            subject = "ANTIKATKO — Verify Your Email"
+            subject = "ANTIQUTCO — Verify Your Email"
             message = (
-                f"Your ANTIKATKO email verification code is: {otp}\n\n"
+                f"Your ANTIQUTCO email verification code is: {otp}\n\n"
                 "This code expires in 5 minutes.\n"
                 "If you did not request this code, please ignore this email."
             )
         else:
-            subject = "ANTIKATKO — Password Reset Code"
+            subject = "ANTIQUTCO — Password Reset Code"
             message = (
                 f"Your password reset verification code is: {otp}\n\n"
                 "This code expires in 5 minutes."
