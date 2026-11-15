@@ -5,8 +5,6 @@ import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import translations from "../data/translations";
 import orderService from "../services/orderService";
-import { getAccessToken } from "../services/api"; // 🔥 استيراد دالة التوكن لجلب توكن المستخدم المسجل
-
 const SHIPPING_COST = 100;
 
 function Checkout() {
@@ -55,78 +53,58 @@ function Checkout() {
   const subtotal = cartTotal;
   const finalTotal = subtotal > 0 ? subtotal + SHIPPING_COST : 0;
 
-  const submitOrder = async (event) => {
-    event.preventDefault();
 
-    if (isSubmitting || !cartItems.length) return;
+const submitOrder = async (event) => {
+  event.preventDefault();
 
-    setIsSubmitting(true);
+  if (isSubmitting || !cartItems.length) return;
 
-    try {
-      // 1. جلب التوكن الخاص بالمستخدم الحالي لربط الأوردر بحسابه الشخصي في الداتا بيز
-      const token = getAccessToken();
+  setIsSubmitting(true);
 
-      // تجهيز الـ payload المتوافق مع CheckoutSerializer في Django Backend
-      const checkoutPayload = {
-        name: form.name,
-        email: form.email,
-        phone: form.phone,
-        address: form.address,
-        city: form.city,
-        governorate: form.city, // Backend falls back governorate to city if needed
-        notes: form.notes,
-        payment_method: form.paymentMethod,
-        items: cartItems.map((item) => ({
-          product_id: item.id,
-          quantity: Number(item.quantity),
-        })),
-      };
+  try {
+    const checkoutPayload = {
+      name: form.name,
+      email: form.email,
+      phone: form.phone,
+      address: form.address,
+      city: form.city,
+      governorate: form.city,
+      notes: form.notes,
+      payment_method: form.paymentMethod,
+      items: cartItems.map((item) => ({
+        product_id: item.id,
+        quantity: Number(item.quantity),
+      })),
+    };
 
-      // 2. تعديل طريقة الإرسال أو تمرير الهيدر بحيث يتضمن التوكن (حسب تصميم orderService لديك)
-      // إذا كان orderService.checkout يقبل إعدادات إضافية، أو يمكنك إرساله مباشرة عبر الـ fetch أو تمريره للخدمة:
-      let createdOrder;
-      if (orderService.checkout.length > 1 || typeof orderService.checkout === "function") {
-        // إذا كنت تستخدم orderService مباشرة، يمكنك تعديله أو إرسال الهيدر من خلاله
-        // ولضمان عملها بشكل مباشر ومضمون 100%، نقوم بإرسال الطلب مع الـ Authorization Header:
-        const response = await fetch("http://127.0.0.1:8000/api/v1/orders/checkout/", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(checkoutPayload),
-        });
+    // Django validates stock, creates the order, and deducts stock.
+    const createdOrder = await orderService.checkout(checkoutPayload);
 
-        const data = await response.json();
-        if (!response.ok) {
-          throw data;
-        }
-        createdOrder = data.data || data;
-      } else {
-        createdOrder = await orderService.checkout(checkoutPayload);
-      }
-
-      // تفريغ السلة بعد نجاح الطلب
-      clearCart();
-
-      // الانتقال لصفحة تأكيد الطلب برقم الطلب الحقيقي من الداتا بيز
-      navigate(`/order-confirmation/${createdOrder.order_number || createdOrder.id}`, {
-        state: { order: createdOrder },
-      });
-    } catch (error) {
-      console.error("Order creation failed:", error);
-
-      const errorMessage =
-        error?.data?.message ||
-        error?.message ||
-        (isArabic
-          ? "حدث خطأ أثناء إنشاء الطلب. تأكد من توفر المخزون وحاول مرة أخرى."
-          : "An error occurred while creating your order. Please check stock and try again.");
-
-      window.alert(errorMessage);
-      setIsSubmitting(false);
+    if (!createdOrder) {
+      throw new Error("Invalid order response");
     }
-  };
+
+    clearCart();
+
+    navigate(
+      `/order-confirmation/${createdOrder.order_number || createdOrder.id}`,
+      { state: { order: createdOrder } }
+    );
+  } catch (error) {
+    console.error("Order creation failed:", error);
+
+    const errorMessage =
+      error?.data?.message ||
+      error?.message ||
+      (isArabic
+        ? "حدث خطأ أثناء إنشاء الطلب. تأكد من توفر المخزون وحاول مرة أخرى."
+        : "An error occurred while creating your order. Please check stock and try again.");
+
+    window.alert(errorMessage);
+    setIsSubmitting(false);
+  }
+};
+
 
   if (!cartItems.length) {
     return (

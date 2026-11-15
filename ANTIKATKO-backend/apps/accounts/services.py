@@ -233,10 +233,19 @@ class AuthenticationService:
     def login(cls, email, password):
         email = email.lower().strip()
 
-        user = authenticate(
-            username=email,
-            password=password,
-        )
+        # التحقق الإضافي المباشر لضمان جلب المستخدم والتحقق من كلمة المرور بدقة
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        
+        try:
+            user_obj = User.objects.get(email__iexact=email)
+        except User.DoesNotExist:
+            user_obj = None
+
+        if user_obj is not None and user_obj.check_password(password):
+            user = user_obj
+        else:
+            user = authenticate(username=email, password=password)
 
         if not user:
             raise BusinessLogicError(
