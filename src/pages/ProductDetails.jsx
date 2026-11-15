@@ -1,6 +1,7 @@
+
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { getProducts, refreshProductsFromBackend } from "../data/products";
+import { getProducts } from "../data/products";
 import productService from "../services/productService";
 import { useCart } from "../context/CartContext";
 import { useWishlist } from "../context/WishlistContext";
@@ -17,19 +18,30 @@ function ProductDetails() {
   const [loading, setLoading] = useState(false);
   const [quantity, setQuantity] = useState(1);
 
+  const { addToCart, openCart } = useCart();
+  const { toggleWishlist, isInWishlist } = useWishlist();
+
+  // Fetch the latest product details from the backend
   useEffect(() => {
     let isMounted = true;
+
     setLoading(true);
+    setDirectProduct(null);
+
     productService
       .getProductById(id)
       .then((p) => {
-        if (isMounted && p) setDirectProduct(p);
+        if (isMounted && p) {
+          setDirectProduct(p);
+        }
       })
       .catch((e) => {
         console.warn("Direct product fetch failed:", e.message);
       })
       .finally(() => {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       });
 
     return () => {
@@ -37,6 +49,7 @@ function ProductDetails() {
     };
   }, [id]);
 
+  // Listen for product updates
   useEffect(() => {
     const updateProducts = () => {
       setProducts(getProducts());
@@ -49,24 +62,33 @@ function ProductDetails() {
     };
   }, []);
 
+  // Reset quantity when product changes
   useEffect(() => {
     setQuantity(1);
   }, [id]);
 
+  // Get product from API first, then local products
   const product =
     directProduct ||
     products.find(
-      (item) => String(item.id) === String(id) || String(item.slug) === String(id)
+      (item) =>
+        String(item.id) === String(id) ||
+        String(item.slug) === String(id)
     );
-
-  const { addToCart, openCart } = useCart();
-  const { toggleWishlist, isInWishlist } = useWishlist();
 
   if (loading && !product) {
     return (
-      <main className="product-details-page" style={{ textAlign: "center", padding: "100px 20px" }}>
+      <main
+        className="product-details-page"
+        style={{
+          textAlign: "center",
+          padding: "100px 20px",
+        }}
+      >
         <p style={{ fontSize: "18px", color: "#80632e" }}>
-          {isArabic ? "جاري تحميل تفاصيل المنتج..." : "Loading product details..."}
+          {isArabic
+            ? "جاري تحميل تفاصيل المنتج..."
+            : "Loading product details..."}
         </p>
       </main>
     );
@@ -86,25 +108,51 @@ function ProductDetails() {
     );
   }
 
+  // Product name
   const productName = isArabic
-    ? product.nameAr || product.name
-    : product.name;
+    ? product.nameAr || product.name_ar || product.name
+    : product.name || product.name_en;
 
+  // Product category
   const productCategory = isArabic
-    ? product.categoryAr || product.category
-    : product.category;
+    ? product.categoryAr || product.category_ar || product.category
+    : product.category || product.category_en;
 
+  // Product description
+  // Supports both frontend aliases and Django API field names
   const productDescription = isArabic
-    ? product.descriptionAr || product.description || "قطعة مختارة بعناية من مجموعة ANTIQUTCO. أضف لمسة من الأناقة الخالدة والطابع المميز إلى مساحتك."
-    : product.description || "A carefully selected piece from the ANTIQUTCO collection. Add a timeless touch and distinctive character to your space.";
+    ? product.descriptionAr ||
+      product.description_ar ||
+      product.description ||
+      product.description_en ||
+      "قطعة مختارة بعناية من مجموعة ANTIQUTCO."
+    : product.description ||
+      product.description_en ||
+      product.descriptionAr ||
+      product.description_ar ||
+      "A carefully selected piece from the ANTIQUTCO collection.";
 
-  const stockCount = product.stock !== undefined ? Number(product.stock) : 10;
-  const isOutOfStock = stockCount === 0;
+  // Product image
+  const productImage =
+    product.image ||
+    product.main_image ||
+    product.mainImage ||
+    "";
 
-  const currentPrice = Number(product.price);
+  // Stock
+  const stockCount =
+    product.stock !== undefined ? Number(product.stock) : 10;
+
+  const isOutOfStock = stockCount <= 0;
+
+  // Pricing
+  const currentPrice = Number(product.price || 0);
 
   const originalPrice = Number(
-    product.originalPrice || product.price
+    product.originalPrice ||
+      product.original_price ||
+      product.price ||
+      0
   );
 
   const discount =
@@ -114,6 +162,7 @@ function ProductDetails() {
         )
       : 0;
 
+  // Currency formatting
   const currency = isArabic ? "جنيه" : "EGP";
   const numberLocale = isArabic ? "ar-EG" : "en-US";
 
@@ -127,14 +176,18 @@ function ProductDetails() {
 
   const favorite = isInWishlist(product.id);
 
+  // Add product to cart
   const handleAddToCart = () => {
     if (isOutOfStock) return;
+
     addToCart(product, quantity);
     openCart();
   };
 
+  // Buy product immediately
   const handleBuyNow = () => {
     if (isOutOfStock) return;
+
     addToCart(product, quantity);
     navigate("/checkout");
   };
@@ -142,16 +195,26 @@ function ProductDetails() {
   return (
     <main className="product-details-page">
       <div className="product-details-layout">
+        {/* Product Image */}
         <div className="product-details-image">
-          <img src={product.image} alt={productName} />
+          {productImage ? (
+            <img src={productImage} alt={productName} />
+          ) : (
+            <div className="product-image-placeholder">
+              {isArabic ? "لا توجد صورة" : "No Image Available"}
+            </div>
+          )}
 
           {discount > 0 && (
             <span className="product-discount-badge">
-              {isArabic ? `خصم ${discount}%` : `${discount}% OFF`}
+              {isArabic
+                ? `خصم ${discount}%`
+                : `${discount}% OFF`}
             </span>
           )}
         </div>
 
+        {/* Product Information */}
         <div className="product-details-content">
           <span className="product-category">
             {productCategory}
@@ -159,7 +222,7 @@ function ProductDetails() {
 
           <h1>{productName}</h1>
 
-          {/* عرض حالة المخزون بوضوح في صفحة التفاصيل */}
+          {/* Stock Status */}
           <div style={{ margin: "10px 0" }}>
             <span
               style={{
@@ -167,8 +230,16 @@ function ProductDetails() {
                 fontWeight: "600",
                 padding: "4px 10px",
                 borderRadius: "6px",
-                background: isOutOfStock ? "#fae9e5" : stockCount <= 3 ? "#fef7e0" : "#e8f0fe",
-                color: isOutOfStock ? "#a34435" : stockCount <= 3 ? "#b06000" : "#1967d2",
+                background: isOutOfStock
+                  ? "#fae9e5"
+                  : stockCount <= 3
+                  ? "#fef7e0"
+                  : "#e8f0fe",
+                color: isOutOfStock
+                  ? "#a34435"
+                  : stockCount <= 3
+                  ? "#b06000"
+                  : "#1967d2",
                 display: "inline-block",
               }}
             >
@@ -182,6 +253,7 @@ function ProductDetails() {
             </span>
           </div>
 
+          {/* Product Pricing */}
           <div className="product-details-pricing">
             <span className="product-current-price">
               {formatPrice(currentPrice)}
@@ -202,10 +274,12 @@ function ProductDetails() {
             )}
           </div>
 
+          {/* Product Description */}
           <p className="product-description-text">
             {productDescription}
           </p>
 
+          {/* Quantity Controls */}
           {!isOutOfStock && (
             <div className="quantity-controls">
               <button
@@ -224,7 +298,9 @@ function ProductDetails() {
 
               <button
                 type="button"
-                onClick={() => setQuantity((q) => Math.min(stockCount, q + 1))}
+                onClick={() =>
+                  setQuantity((q) => Math.min(stockCount, q + 1))
+                }
                 aria-label={
                   isArabic ? "زيادة الكمية" : "Increase quantity"
                 }
@@ -234,13 +310,17 @@ function ProductDetails() {
             </div>
           )}
 
+          {/* Product Actions */}
           <div className="product-detail-actions">
             <button
               type="button"
               className="btn-buy-now"
               onClick={handleBuyNow}
               disabled={isOutOfStock}
-              style={{ opacity: isOutOfStock ? 0.6 : 1, cursor: isOutOfStock ? "not-allowed" : "pointer" }}
+              style={{
+                opacity: isOutOfStock ? 0.6 : 1,
+                cursor: isOutOfStock ? "not-allowed" : "pointer",
+              }}
             >
               {isArabic ? "اشترِ الآن" : "Buy Now"}
             </button>
@@ -250,7 +330,10 @@ function ProductDetails() {
               className="btn-add-cart"
               onClick={handleAddToCart}
               disabled={isOutOfStock}
-              style={{ opacity: isOutOfStock ? 0.6 : 1, cursor: isOutOfStock ? "not-allowed" : "pointer" }}
+              style={{
+                opacity: isOutOfStock ? 0.6 : 1,
+                cursor: isOutOfStock ? "not-allowed" : "pointer",
+              }}
             >
               {isOutOfStock
                 ? isArabic
@@ -277,7 +360,9 @@ function ProductDetails() {
           </div>
 
           <Link to="/shop" className="continue-shopping">
-            {isArabic ? "العودة إلى المجموعة" : "Back to collection"}
+            {isArabic
+              ? "العودة إلى المجموعة"
+              : "Back to collection"}
           </Link>
         </div>
       </div>

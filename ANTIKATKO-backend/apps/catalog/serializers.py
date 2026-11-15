@@ -119,11 +119,21 @@ class ProductListSerializer(serializers.ModelSerializer):
         source="category",
         read_only=True,
     )
+
     in_stock = serializers.BooleanField(read_only=True)
     is_discounted = serializers.BooleanField(read_only=True)
 
     name = serializers.CharField(source="name_en", read_only=True)
     nameAr = serializers.CharField(source="name_ar", read_only=True)
+
+    description = serializers.CharField(
+        source="description_en",
+        read_only=True,
+    )
+    descriptionAr = serializers.CharField(
+        source="description_ar",
+        read_only=True,
+    )
 
     category = serializers.SerializerMethodField()
     categoryAr = serializers.SerializerMethodField()
@@ -145,6 +155,10 @@ class ProductListSerializer(serializers.ModelSerializer):
             "nameAr",
             "name_en",
             "name_ar",
+            "description",
+            "descriptionAr",
+            "description_en",
+            "description_ar",
             "slug",
             "category",
             "categoryAr",
@@ -189,6 +203,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         source="category",
         read_only=True,
     )
+
     images = ProductImageSerializer(many=True, read_only=True)
 
     in_stock = serializers.BooleanField(read_only=True)
@@ -278,20 +293,24 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
         required=False,
         write_only=True,
     )
+
     nameAr = serializers.CharField(
         required=False,
         write_only=True,
     )
+
     description = serializers.CharField(
         required=False,
         write_only=True,
         allow_blank=True,
     )
+
     descriptionAr = serializers.CharField(
         required=False,
         write_only=True,
         allow_blank=True,
     )
+
     originalPrice = serializers.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -299,6 +318,7 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
         write_only=True,
         allow_null=True,
     )
+
     image = serializers.CharField(
         required=False,
         write_only=True,
