@@ -228,6 +228,13 @@ print(
     "EMAIL PASSWORD HAS HIDDEN RTL:",
     "\u200f" in EMAIL_HOST_PASSWORD
 )
+
+print("EMAIL USER LENGTH:", len(EMAIL_HOST_USER))
+print(
+    "EMAIL USER NON-ASCII:",
+    [(i, hex(ord(c))) for i, c in enumerate(EMAIL_HOST_USER) if ord(c) > 127]
+)
+print("EMAIL USER REPR:", repr(EMAIL_HOST_USER))
 # CORS configuration
 
 CORS_ALLOW_ALL_ORIGINS = True
