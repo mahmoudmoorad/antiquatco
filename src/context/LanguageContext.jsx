@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useEffect, useState } from "react";
 
 const LanguageContext = createContext(null);
@@ -6,9 +7,9 @@ const LANGUAGE_KEY = "antikatko-language";
 export function LanguageProvider({ children }) {
   const [language, setLanguage] = useState(() => {
     try {
-      return localStorage.getItem(LANGUAGE_KEY) || "ar";
+      return localStorage.getItem(LANGUAGE_KEY) || "en";
     } catch {
-      return "ar";
+      return "en";
     }
   });
 
